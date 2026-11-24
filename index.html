@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>WeatherCenter</title>
+  <meta name="description" content="Previsão do tempo e alertas meteorológicos para todas as cidades do Brasil.">
+  <meta name="theme-color" content="#1e5fa8">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="WeatherCenter">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <img src="icons/icon.svg" alt="" width="32" height="32">
+      <span>WeatherCenter</span>
+    </div>
+    <button id="btn-instalar" class="btn-instalar" hidden>Instalar app</button>
+  </header>
+
+  <main>
+    <section class="busca" role="search">
+      <label for="campo-busca" class="sr">Buscar cidade</label>
+      <input id="campo-busca" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Buscar cidade (ex.: Recife)"
+             aria-autocomplete="list" aria-controls="sugestoes">
+      <ul id="sugestoes" class="sugestoes" role="listbox" hidden></ul>
+      <div id="recentes" class="recentes"></div>
+    </section>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+
+    <section id="painel" hidden>
+      <div id="alertas" class="alertas"></div>
+
+      <article class="cartao atual">
+        <div class="atual-topo">
+          <div>
+            <h1 id="cidade-nome"></h1>
+            <p id="cidade-uf" class="sutil"></p>
+          </div>
+          <div id="atual-icone" class="icone-grande" aria-hidden="true"></div>
+        </div>
+        <div class="atual-temp">
+          <span id="atual-temp"></span>
+          <div>
+            <p id="atual-desc"></p>
+            <p id="atual-sensacao" class="sutil"></p>
+          </div>
+        </div>
+        <dl class="detalhes">
+          <div><dt>Umidade</dt><dd id="d-umidade"></dd></div>
+          <div><dt>Vento</dt><dd id="d-vento"></dd></div>
+          <div><dt>Chuva agora</dt><dd id="d-chuva"></dd></div>
+          <div><dt>Índice UV</dt><dd id="d-uv"></dd></div>
+        </dl>
+        <p id="atualizado" class="sutil pequeno"></p>
+      </article>
+
+      <article class="cartao">
+        <h2>Próximas horas</h2>
+        <div id="horas" class="horas"></div>
+      </article>
+
+      <article class="cartao">
+        <h2>Próximos 7 dias</h2>
+        <ul id="dias" class="dias"></ul>
+      </article>
+    </section>
+
+    <section id="boas-vindas" class="cartao boas-vindas">
+      <h2>Previsão do tempo para todo o Brasil</h2>
+      <p>Digite o nome de qualquer um dos 5.570 municípios brasileiros para ver o tempo agora, a previsão hora a hora, os próximos 7 dias e os alertas oficiais do INMET.</p>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <p>Previsão: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
+      Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a>.
+      Municípios: <a href="https://servicodados.ibge.gov.br/api/docs/localidades" target="_blank" rel="noopener">IBGE</a>.</p>
+    <p>Em emergências, ligue 199 (Defesa Civil) ou 193 (Bombeiros).</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
