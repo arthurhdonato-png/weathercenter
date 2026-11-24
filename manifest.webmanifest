@@ -1,7 +1,7 @@
 {
   "name": "WeatherCenter – Previsão do tempo",
   "short_name": "WeatherCenter",
-  "description": "Previsão do tempo e alertas meteorológicos para todas as cidades do Brasil.",
+  "description": "Previsão do tempo, mapas e alertas meteorológicos para todas as cidades do Brasil.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

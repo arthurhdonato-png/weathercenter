@@ -4,87 +4,158 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WeatherCenter</title>
-  <meta name="description" content="Previsão do tempo e alertas meteorológicos para todas as cidades do Brasil.">
+  <meta name="description" content="Previsão do tempo, mapas e alertas meteorológicos para todas as cidades do Brasil.">
   <meta name="theme-color" content="#1e5fa8">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="WeatherCenter">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-aba="previsao">
   <header class="topo">
-    <div class="marca">
-      <img src="icons/icon.svg" alt="" width="32" height="32">
-      <span>WeatherCenter</span>
+    <div class="topo-linha">
+      <a class="marca" href="./" aria-label="WeatherCenter, início">
+        <img src="icons/icon.svg" alt="" width="34" height="34">
+        <span>WeatherCenter</span>
+      </a>
+      <nav class="abas-topo" aria-label="Seções">
+        <a href="#previsao" data-aba="previsao">Previsão</a>
+        <a href="#mapas" data-aba="mapas">Mapas</a>
+        <a href="#alertas" data-aba="alertas">Alertas</a>
+      </nav>
+      <button id="btn-instalar" class="btn-vidro" hidden>Instalar app</button>
     </div>
-    <button id="btn-instalar" class="btn-instalar" hidden>Instalar app</button>
+
+    <div class="busca" role="search">
+      <label for="campo-busca" class="sr">Buscar cidade</label>
+      <span class="busca-lupa" aria-hidden="true">🔎</span>
+      <input id="campo-busca" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Buscar cidade do Brasil" aria-autocomplete="list" aria-controls="sugestoes" aria-expanded="false">
+      <button id="btn-local" class="btn-local" type="button" title="Usar minha localização" aria-label="Usar minha localização">📍</button>
+      <ul id="sugestoes" class="sugestoes" role="listbox" hidden></ul>
+    </div>
+    <div id="recentes" class="recentes"></div>
   </header>
 
   <main>
-    <section class="busca" role="search">
-      <label for="campo-busca" class="sr">Buscar cidade</label>
-      <input id="campo-busca" type="search" autocomplete="off" spellcheck="false"
-             placeholder="Buscar cidade (ex.: Recife)"
-             aria-autocomplete="list" aria-controls="sugestoes">
-      <ul id="sugestoes" class="sugestoes" role="listbox" hidden></ul>
-      <div id="recentes" class="recentes"></div>
-    </section>
+    <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 
-    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <!-- ================= PREVISÃO ================= -->
+    <section id="aba-previsao" class="aba">
+      <section id="boas-vindas" class="cartao boas-vindas">
+        <div class="bv-icone" aria-hidden="true">🌦️</div>
+        <h2>Previsão do tempo para todo o Brasil</h2>
+        <p>Veja o tempo agora, as próximas 24 horas, os próximos 7 dias, mapas em tempo real e os alertas oficiais para qualquer um dos 5.570 municípios.</p>
+        <button id="btn-local-boas" class="btn" type="button">📍 Usar minha localização</button>
+        <p class="pequeno">ou busque uma cidade no campo acima</p>
+      </section>
 
-    <section id="painel" hidden>
-      <div id="alertas" class="alertas"></div>
-
-      <article class="cartao atual">
-        <div class="atual-topo">
-          <div>
-            <h1 id="cidade-nome"></h1>
-            <p id="cidade-uf" class="sutil"></p>
-          </div>
-          <div id="atual-icone" class="icone-grande" aria-hidden="true"></div>
-        </div>
-        <div class="atual-temp">
-          <span id="atual-temp"></span>
-          <div>
-            <p id="atual-desc"></p>
-            <p id="atual-sensacao" class="sutil"></p>
+      <div id="painel" hidden>
+        <div class="grade-topo">
+          <article class="cartao hero" id="hero"></article>
+          <div class="coluna">
+            <div id="alertas-cidade" class="alertas-cidade"></div>
+            <article class="cartao widget" id="w-chuva" hidden></article>
           </div>
         </div>
-        <dl class="detalhes">
-          <div><dt>Umidade</dt><dd id="d-umidade"></dd></div>
-          <div><dt>Vento</dt><dd id="d-vento"></dd></div>
-          <div><dt>Chuva agora</dt><dd id="d-chuva"></dd></div>
-          <div><dt>Índice UV</dt><dd id="d-uv"></dd></div>
-        </dl>
-        <p id="atualizado" class="sutil pequeno"></p>
-      </article>
 
-      <article class="cartao">
-        <h2>Próximas horas</h2>
-        <div id="horas" class="horas"></div>
-      </article>
+        <article class="cartao">
+          <h2>Agora</h2>
+          <div id="agora-detalhes" class="agora-detalhes"></div>
+        </article>
 
-      <article class="cartao">
-        <h2>Próximos 7 dias</h2>
-        <ul id="dias" class="dias"></ul>
+        <article class="cartao">
+          <h2>Próximas 24 horas</h2>
+          <div id="grafico-24h" class="grafico-caixa"></div>
+          <div id="tabela-24h" class="tabela-caixa"></div>
+        </article>
+
+        <article class="cartao">
+          <h2>Próximos 7 dias</h2>
+          <p class="nota">Toque em um dia para ver todos os detalhes.</p>
+          <ul id="dias" class="dias"></ul>
+        </article>
+
+        <div class="widgets">
+          <article class="cartao widget" id="w-uv"></article>
+          <article class="cartao widget" id="w-sol"></article>
+          <article class="cartao widget" id="w-vento"></article>
+          <article class="cartao widget" id="w-ar"></article>
+          <article class="cartao widget" id="w-lua"></article>
+          <article class="cartao widget" id="w-conforto"></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MAPAS ================= -->
+    <section id="aba-mapas" class="aba" hidden>
+      <article class="cartao mapa-cartao">
+        <div class="mapa-topo">
+          <h2>Mapas do tempo</h2>
+          <label class="radar"><input type="checkbox" id="radar-check"> Radar de chuva <span id="radar-info" class="pequeno"></span></label>
+        </div>
+        <div id="mapa-camadas" class="chips" role="toolbar" aria-label="Camada do mapa"></div>
+        <div class="mapa-caixa">
+          <div id="mapa-tempo" class="mapa"></div>
+          <div id="mapa-status" class="mapa-status" hidden></div>
+          <div id="mapa-legenda" class="mapa-legenda"></div>
+        </div>
+        <div class="mapa-tempo-ctrl">
+          <label for="mapa-hora">Horário</label>
+          <input type="range" id="mapa-hora" min="0" max="24" value="0" step="1">
+          <span id="mapa-hora-rotulo" class="pequeno"></span>
+        </div>
+        <p class="nota">Toque no mapa para ver o valor e abrir a previsão do local. Os valores são aproximados por região (grade de cerca de 140 km).</p>
       </article>
     </section>
 
-    <section id="boas-vindas" class="cartao boas-vindas">
-      <h2>Previsão do tempo para todo o Brasil</h2>
-      <p>Digite o nome de qualquer um dos 5.570 municípios brasileiros para ver o tempo agora, a previsão hora a hora, os próximos 7 dias e os alertas oficiais do INMET.</p>
+    <!-- ================= ALERTAS ================= -->
+    <section id="aba-alertas" class="aba" hidden>
+      <article class="cartao mapa-cartao">
+        <div class="mapa-topo">
+          <h2>Alertas no Brasil</h2>
+          <select id="alertas-uf" aria-label="Filtrar por estado"></select>
+        </div>
+        <div class="mapa-caixa">
+          <div id="mapa-alertas" class="mapa"></div>
+          <div id="alertas-status" class="mapa-status" hidden></div>
+          <div class="mapa-legenda leg-alertas">
+            <div class="leg-titulo">INMET</div>
+            <div><span class="q" style="background:#FFD400"></span>Perigo potencial</div>
+            <div><span class="q" style="background:#FF8C00"></span>Perigo</div>
+            <div><span class="q" style="background:#E60000"></span>Grande perigo</div>
+          </div>
+        </div>
+        <p class="nota">Toque em uma área colorida para ver os alertas daquele local. Cores originais de cada instituto.</p>
+      </article>
+      <div class="grade-alertas">
+        <div id="alertas-lista"></div>
+        <article class="cartao">
+          <h2>Fontes de alertas</h2>
+          <ul id="alertas-fontes" class="fontes"></ul>
+        </article>
+      </div>
     </section>
   </main>
 
   <footer class="rodape">
-    <p>Previsão: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
-      Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a>.
-      Municípios: <a href="https://servicodados.ibge.gov.br/api/docs/localidades" target="_blank" rel="noopener">IBGE</a>.</p>
-    <p>Em emergências, ligue 199 (Defesa Civil) ou 193 (Bombeiros).</p>
+    <p>Previsão e qualidade do ar: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) ·
+      Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
+      Municípios e contornos: <a href="https://servicodados.ibge.gov.br/api/docs" target="_blank" rel="noopener">IBGE</a> ·
+      Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
+    <p>Em emergências, ligue <strong>199</strong> (Defesa Civil) ou <strong>193</strong> (Bombeiros).</p>
   </footer>
 
-  <script src="app.js"></script>
+  <nav class="abas-baixo" aria-label="Seções">
+    <a href="#previsao" data-aba="previsao"><span aria-hidden="true">🌤️</span>Previsão</a>
+    <a href="#mapas" data-aba="mapas"><span aria-hidden="true">🗺️</span>Mapas</a>
+    <a href="#alertas" data-aba="alertas"><span aria-hidden="true">⚠️</span>Alertas</a>
+  </nav>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
