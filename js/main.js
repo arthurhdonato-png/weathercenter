@@ -4,7 +4,7 @@ import {
   carregarMunicipios, buscarLocal, buscarOpenMeteo, coordenadas, previsao, qualidadeAr,
   todosAlertas, alertaAfetaCidade, posicaoAtual, cidadeDaPosicao, municipioPorId,
 } from './dados.js';
-import { renderAgora, renderChuvaProxima, renderWidgets, render24h, render7dias, renderAlertasCidade } from './previsao.js';
+import { renderAgora, renderChuvaProxima, renderWidgets, renderHoras, renderDias, renderFontes, renderAlertasCidade } from './previsao.js';
 import { iniciarMapas } from './mapas.js';
 import { iniciarAlertasMapa } from './alertasMapa.js';
 
@@ -17,22 +17,47 @@ function setStatus(msg, erro = false) {
 
 /* ======================= Navegação por abas ======================= */
 const ABAS = ['previsao', 'mapas', 'alertas'];
+let abaAtual = null;
+const rolagemDaAba = {}; // cada aba lembra onde a pessoa parou de rolar
 function mostrarAba(aba) {
   if (!ABAS.includes(aba)) aba = 'previsao';
+  if (aba === abaAtual) return;
+  if (abaAtual) rolagemDaAba[abaAtual] = window.scrollY;
+  abaAtual = aba;
   for (const a of ABAS) {
     $(`aba-${a}`).hidden = a !== aba;
-    document.querySelectorAll(`[data-aba="${a}"]`).forEach((b) => b.setAttribute('aria-current', a === aba ? 'page' : 'false'));
+    document.querySelectorAll(`a[data-aba="${a}"]`).forEach((b) => b.setAttribute('aria-current', a === aba ? 'page' : 'false'));
   }
   document.body.dataset.aba = aba;
+  window.scrollTo({ top: rolagemDaAba[aba] || 0 });
   if (aba === 'mapas') requestAnimationFrame(() => iniciarMapas(abrirPonto));
   if (aba === 'alertas') requestAnimationFrame(() => iniciarAlertasMapa());
 }
-window.addEventListener('hashchange', () => mostrarAba(location.hash.slice(1)));
-document.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', (e) => {
+window.addEventListener('hashchange', () => {
+  // Só reage a endereços das abas (#previsao, #mapas, #alertas); qualquer outro "#" é ignorado
+  const aba = location.hash.slice(1);
+  if (ABAS.includes(aba)) mostrarAba(aba);
+});
+// Atenção: só os LINKS das abas. O <body> também tem data-aba, e escutar cliques nele fazia
+// qualquer clique na página voltar para o topo (e impedia abrir os dias da previsão).
+document.querySelectorAll('a[data-aba]').forEach((b) => b.addEventListener('click', (e) => {
   e.preventDefault();
   history.replaceState(null, '', `${location.search}#${b.dataset.aba}`);
   mostrarAba(b.dataset.aba);
-  window.scrollTo({ top: 0 });
+}));
+
+// Botões que levam a um cartão da própria página (ex.: "Consenso de N fontes")
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ir]');
+  if (!b) return;
+  const alvo = $(b.dataset.ir);
+  if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Setas da previsão por hora (no computador, onde não há deslizar com o dedo)
+document.querySelectorAll('[data-rolar]').forEach((b) => b.addEventListener('click', () => {
+  const faixa = $('horas');
+  faixa.scrollBy({ left: Number(b.dataset.rolar) * faixa.clientWidth * 0.8, behavior: 'smooth' });
 }));
 
 /* ======================= Abrir uma cidade ======================= */
@@ -46,6 +71,7 @@ function alertasCompartilhados() {
   return alertasPromessa;
 }
 
+let cidadeAtual = null;
 async function abrirCidade(cidade) {
   const meu = ++pedido;
   fecharSugestoes();
@@ -57,7 +83,7 @@ async function abrirCidade(cidade) {
   try {
     const c = await coordenadas(cidade);
     const [prev, ar, alertas] = await Promise.all([
-      previsao(c.lat, c.lon),
+      previsao(c.lat, c.lon, c.id),
       qualidadeAr(c.lat, c.lon).catch(() => null),
       alertasCompartilhados(),
     ]);
@@ -66,9 +92,14 @@ async function abrirCidade(cidade) {
     renderAlertasCidade(alertas, c, alertaAfetaCidade);
     renderChuvaProxima(prev);
     renderWidgets(prev, ar);
-    render24h(prev);
-    render7dias(prev);
+    renderHoras(prev);
+    renderDias(prev);
+    renderFontes(prev);
     $('painel').hidden = false;
+    // Cidade nova: começa do topo. Mesma cidade (atualização): a página fica onde está.
+    const chaveCidade = c.id || `${c.nome}|${c.uf}|${c.local ? 'local' : ''}`;
+    if (cidadeAtual !== chaveCidade) window.scrollTo({ top: 0 });
+    cidadeAtual = chaveCidade;
     $('boas-vindas').hidden = true;
     setStatus('');
     salvarRecente(c);

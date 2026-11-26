@@ -127,31 +127,9 @@ export async function cidadeDaPosicao(lat, lon) {
   return { id: m?.id ?? null, nome: m?.nome ?? nome ?? 'Minha localização', uf: m?.uf ?? uf, lat, lon, local: true };
 }
 
-/* ======================= Previsão (Open-Meteo) ======================= */
-const HORARIAS = [
-  'temperature_2m', 'apparent_temperature', 'precipitation_probability', 'precipitation', 'weather_code',
-  'uv_index', 'wind_speed_10m', 'wind_direction_10m', 'wind_gusts_10m', 'relative_humidity_2m',
-  'visibility', 'pressure_msl', 'dew_point_2m', 'cloud_cover', 'is_day',
-];
-const DIARIAS = [
-  'weather_code', 'temperature_2m_max', 'temperature_2m_min', 'apparent_temperature_max', 'apparent_temperature_min',
-  'precipitation_sum', 'precipitation_probability_max', 'uv_index_max', 'wind_speed_10m_max', 'wind_gusts_10m_max',
-  'wind_direction_10m_dominant', 'sunrise', 'sunset', 'daylight_duration',
-];
-const ATUAIS = [
-  'temperature_2m', 'apparent_temperature', 'relative_humidity_2m', 'is_day', 'precipitation', 'weather_code',
-  'wind_speed_10m', 'wind_direction_10m', 'wind_gusts_10m', 'pressure_msl', 'cloud_cover', 'uv_index', 'visibility', 'dew_point_2m',
-];
-
-export function previsao(lat, lon) {
-  const p = new URLSearchParams({
-    latitude: lat, longitude: lon, timezone: 'auto', forecast_days: '8',
-    current: ATUAIS.join(','), hourly: HORARIAS.join(','), daily: DIARIAS.join(','),
-    minutely_15: 'precipitation', forecast_minutely_15: '12',
-  });
-  const chave = `wc:prev2:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
-  return comCache(chave, 20 * 60 * 1000, () => getJSON(`${API.previsao}?${p}`));
-}
+/* ======================= Previsão (consenso de várias fontes) ======================= */
+// A previsão do tempo é o consenso de vários modelos e institutos: veja js/consenso.js
+export { previsaoConsenso as previsao } from './consenso.js';
 
 export function qualidadeAr(lat, lon) {
   const p = new URLSearchParams({

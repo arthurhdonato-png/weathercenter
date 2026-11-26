@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WeatherCenter</title>
   <meta name="description" content="Previsão do tempo, mapas e alertas meteorológicos para todas as cidades do Brasil.">
-  <meta name="theme-color" content="#1e5fa8">
+  <meta name="theme-color" content="#2a6fb8">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WeatherCenter">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="visual.css">
 </head>
 <body data-aba="previsao">
   <header class="topo">
@@ -48,44 +50,54 @@
       <section id="boas-vindas" class="cartao boas-vindas">
         <div class="bv-icone" aria-hidden="true">🌦️</div>
         <h2>Previsão do tempo para todo o Brasil</h2>
-        <p>Veja o tempo agora, as próximas 24 horas, os próximos 7 dias, mapas em tempo real e os alertas oficiais para qualquer um dos 5.570 municípios.</p>
+        <p>Previsão por consenso de vários institutos e modelos meteorológicos do mundo, com as próximas horas, os próximos 10 dias, mapas e os alertas oficiais para qualquer um dos 5.570 municípios.</p>
         <button id="btn-local-boas" class="btn" type="button">📍 Usar minha localização</button>
         <p class="pequeno">ou busque uma cidade no campo acima</p>
       </section>
 
       <div id="painel" hidden>
-        <div class="grade-topo">
-          <article class="cartao hero" id="hero"></article>
-          <div class="coluna">
-            <div id="alertas-cidade" class="alertas-cidade"></div>
-            <article class="cartao widget" id="w-chuva" hidden></article>
+        <header class="hero" id="hero"></header>
+        <div id="alertas-cidade" class="alertas-cidade"></div>
+
+        <div class="grade-previsao">
+          <div class="col-principal">
+            <article class="cartao" id="w-chuva" hidden></article>
+
+            <article class="cartao" id="c-horas">
+              <p id="resumo-horas" class="resumo resumo-topo"></p>
+              <div class="horas-caixa">
+                <button type="button" class="horas-seta esq" data-rolar="-1" aria-label="Horas anteriores">‹</button>
+                <ul id="horas" class="horas" tabindex="0" aria-label="Previsão por hora"></ul>
+                <button type="button" class="horas-seta dir" data-rolar="1" aria-label="Próximas horas">›</button>
+              </div>
+              <details class="mais">
+                <summary>Gráfico e tabela das próximas 24 horas</summary>
+                <div id="grafico-24h" class="grafico-caixa"></div>
+                <div id="tabela-24h"></div>
+              </details>
+            </article>
+
+            <article class="cartao" id="c-dias">
+              <h2 class="rotulo"><span aria-hidden="true">📅</span><span id="dias-titulo">Previsão para 10 dias</span></h2>
+              <ul id="dias" class="dias"></ul>
+            </article>
           </div>
-        </div>
 
-        <article class="cartao">
-          <h2>Agora</h2>
-          <div id="agora-detalhes" class="agora-detalhes"></div>
-        </article>
-
-        <article class="cartao">
-          <h2>Próximas 24 horas</h2>
-          <div id="grafico-24h" class="grafico-caixa"></div>
-          <div id="tabela-24h" class="tabela-caixa"></div>
-        </article>
-
-        <article class="cartao">
-          <h2>Próximos 7 dias</h2>
-          <p class="nota">Toque em um dia para ver todos os detalhes.</p>
-          <ul id="dias" class="dias"></ul>
-        </article>
-
-        <div class="widgets">
-          <article class="cartao widget" id="w-uv"></article>
-          <article class="cartao widget" id="w-sol"></article>
-          <article class="cartao widget" id="w-vento"></article>
-          <article class="cartao widget" id="w-ar"></article>
-          <article class="cartao widget" id="w-lua"></article>
-          <article class="cartao widget" id="w-conforto"></article>
+          <div class="col-lateral">
+            <div class="quadros">
+              <article class="cartao quadro" id="w-sensacao"></article>
+              <article class="cartao quadro" id="w-uv"></article>
+              <article class="cartao quadro largo" id="w-vento"></article>
+              <article class="cartao quadro" id="w-precip"></article>
+              <article class="cartao quadro" id="w-sol"></article>
+              <article class="cartao quadro" id="w-umidade"></article>
+              <article class="cartao quadro" id="w-visib"></article>
+              <article class="cartao quadro" id="w-pressao"></article>
+              <article class="cartao quadro" id="w-ar"></article>
+              <article class="cartao quadro largo" id="w-lua"></article>
+            </div>
+            <article class="cartao" id="c-fontes" hidden></article>
+          </div>
         </div>
       </div>
     </section>
@@ -142,7 +154,8 @@
   </main>
 
   <footer class="rodape">
-    <p>Previsão e qualidade do ar: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0) ·
+    <p>Previsão: consenso de modelos via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0; ECMWF, NOAA, DWD, Met Office, Météo-France e outros), <a href="https://api.met.no/" target="_blank" rel="noopener">MET Norway</a> (CC BY 4.0) e <a href="https://portal.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
+      Qualidade do ar: Open-Meteo ·
       Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
       Municípios e contornos: <a href="https://servicodados.ibge.gov.br/api/docs" target="_blank" rel="noopener">IBGE</a> ·
       Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
