@@ -7,7 +7,7 @@ import { cartaoAlerta } from './previsao.js';
 
 const CODIGO_POR_UF = Object.fromEntries(Object.entries(UF_POR_CODIGO).map(([c, uf]) => [uf, c]));
 
-const estado = { mapa: null, grupo: null, alertas: [], areas: [], filtroUF: '', status: {} };
+const estado = { mapa: null, grupo: null, alertas: [], areas: [], filtroUF: '', status: {}, coletadoEm: null };
 
 function dentroAnel(lon, lat, anel) {
   let d = false;
@@ -68,8 +68,8 @@ function desenhar() {
 function renderLista(alertas) {
   const el = $('alertas-lista');
   const titulo = estado.filtroUF ? UF_NOMES[estado.filtroUF] : 'Brasil';
-  if (estado.status.inmet === 'erro') {
-    el.innerHTML = '<div class="aviso-neutro">⚠️ Não foi possível consultar os alertas do INMET agora.</div>';
+  if (!Object.values(estado.status).includes('ok')) {
+    el.innerHTML = '<div class="aviso-neutro">⚠️ Não foi possível consultar os alertas agora.</div>';
     return;
   }
   el.innerHTML = `<h3 class="lista-titulo">${alertas.length} alerta${alertas.length === 1 ? '' : 's'} ativo${alertas.length === 1 ? '' : 's'} · ${esc(titulo)}</h3>`
@@ -78,10 +78,12 @@ function renderLista(alertas) {
 }
 
 function renderFontes() {
+  const hora = estado.coletadoEm ? estado.coletadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
   $('alertas-fontes').innerHTML = FONTES_ALERTA.map((f) => {
-    const st = f.ativa ? (estado.status[f.id] === 'erro' ? 'erro' : 'ok') : 'off';
-    const rot = st === 'ok' ? 'Conectado' : st === 'erro' ? 'Fora do ar agora' : 'Sem dados abertos';
-    return `<li class="fonte-${st}">
+    const st = !f.ativa ? 'off' : estado.status[f.id] === 'erro' ? 'erro' : estado.status[f.id] === 'ok' ? 'ok' : 'espera';
+    const rot = st === 'ok' ? (f.ativa === 'coletor' ? `Conectado${hora ? ` · verificado às ${hora}` : ''}` : 'Conectado ao vivo')
+      : st === 'erro' ? 'Fora do ar agora' : st === 'espera' ? 'Verificando…' : 'Sem dados abertos';
+    return `<li class="fonte-${st === 'espera' ? 'off' : st}">
       <span class="fonte-ponto" aria-hidden="true"></span>
       <div><strong>${f.site ? `<a href="${f.site}" target="_blank" rel="noopener">${esc(f.nome)}</a>` : esc(f.nome)}</strong> <span class="fonte-st">${rot}</span>
       <div class="pequeno">${esc(f.descricao)}${f.motivo ? `. ${esc(f.motivo)}` : ''}</div></div>
@@ -121,8 +123,9 @@ export async function iniciarAlertasMapa() {
   $('alertas-status').hidden = false;
   $('alertas-status').textContent = 'Carregando alertas…';
   try {
-    const { alertas, status } = await todosAlertas();
+    const { alertas, status, coletadoEm } = await todosAlertas();
     estado.status = status;
+    estado.coletadoEm = coletadoEm;
     estado.alertas = alertas;
     renderFontes();
     estado.areas = await areasDosAlertas(alertas);

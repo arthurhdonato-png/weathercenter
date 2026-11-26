@@ -1,5 +1,5 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v2';
+const VERSAO = 'wc-v3';
 const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/main.js', 'js/util.js', 'js/dados.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
@@ -27,7 +27,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   // Previsão e alertas: rede primeiro; sem internet, a última resposta salva
-  if (/open-meteo\.com$|inmet\.gov\.br$/.test(url.hostname)) { e.respondWith(redePrimeiro(req, `${VERSAO}-dados`)); return; }
+  if (/open-meteo\.com$|inmet\.gov\.br$|raw\.githubusercontent\.com$/.test(url.hostname)) { e.respondWith(redePrimeiro(req, `${VERSAO}-dados`)); return; }
   // Arquivos do app: rede primeiro (sempre a versão mais nova), cache quando offline
   if (url.origin === location.origin) e.respondWith(redePrimeiro(req, VERSAO));
 });

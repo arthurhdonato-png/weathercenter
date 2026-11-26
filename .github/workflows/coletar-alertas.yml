@@ -1,0 +1,71 @@
+# Coleta os alertas das fontes sem acesso direto pelo navegador (Defesa Civil/IDAP,
+# Marinha) e publica o resultado no ramo "dados" (alertas.json e a cópia inmet.json).
+# O app lê: https://raw.githubusercontent.com/<dono>/<repo>/dados/alertas.json
+#
+# Limites do GitHub Actions:
+# - O menor intervalo possível é 5 minutos. Em horários de muito uso o GitHub
+#   pode atrasar a execução (às vezes 10 a 20 minutos).
+# - O agendamento só funciona a partir do ramo principal (main).
+# - Em repositórios sem atividade por 60 dias o GitHub desliga o agendamento;
+#   basta reativar em Actions > Coletar alertas > Enable workflow.
+name: Coletar alertas
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - 'coletor/**'
+      - '.github/workflows/coletar-alertas.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coletar-alertas-${{ github.event_name == 'pull_request' && github.ref || 'principal' }}
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: coletor
+
+      - name: Buscar alertas
+        run: python3 coletor/coletar.py saida
+        env:
+          # Nos testes de PR, mostra detalhes no log
+          COLETOR_DEBUG: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+
+      - name: Resumo
+        if: always()
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          try:
+              d = json.load(open('saida/alertas.json'))
+          except Exception as e:
+              print(f'Sem arquivo gerado: {e}'); raise SystemExit
+          print(f"### {len(d['alertas'])} alertas ativos ({d['gerado_em']})\n")
+          print('| Fonte | Situação | Alertas |\n|---|---|---|')
+          for f in d['fontes'].values():
+              print(f"| {f['nome']} | {'ok' if f['ok'] else 'erro: ' + f.get('erro', '')} | {f.get('quantidade', '')} |")
+          EOF
+
+      - name: Publicar no ramo "dados"
+        if: github.event_name != 'pull_request'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd saida
+          git init -q -b dados
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add alertas.json inmet.json 2>/dev/null || git add alertas.json
+          git commit -q -m "Alertas de $(date -u +%Y-%m-%dT%H:%MZ)"
+          # O ramo "dados" guarda só a última coleta (sem histórico acumulado)
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dados
