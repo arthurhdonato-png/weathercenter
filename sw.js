@@ -1,8 +1,10 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v5';
-const APP = ['./', 'index.html', 'styles.css', 'visual.css', 'manifest.webmanifest',
-  'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js',
-  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
+const VERSAO = 'wc-v6';
+const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
+  'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/icones.js',
+  'js/mapas.js', 'js/mapaBase.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js',
+  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/fontes/noto-sans-latin-wght-normal.woff2',
+  'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css', 'vendor/maplibre/leaflet-maplibre-gl.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

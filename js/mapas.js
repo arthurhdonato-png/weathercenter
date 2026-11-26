@@ -1,52 +1,70 @@
-// Mapas interativos de tempo (camadas calculadas a partir de uma grade de pontos do Open-Meteo)
+// Mapas do tempo: camadas suaves calculadas a partir de uma grade de previsões (Open-Meteo),
+// animação das próximas 24 horas, partículas de vento e radar de chuva animado (RainViewer).
 /* global L */
-import { $, num, esc, direcao } from './util.js';
-import { contornoBrasil, contornoEstados, gradeMapa, radarQuadros } from './dados.js';
+import { $, num, esc, direcao, getJSON } from './util.js';
+import { contornoBrasil, gradeMapa, radarQuadros } from './dados.js';
+import { basemap, temaEscuro } from './mapaBase.js';
 
+export { basemap, linhasEstados } from './mapaBase.js';
+
+// Grade de previsões (cerca de 140 km entre pontos) e grade fina interpolada (cerca de 28 km)
 const PASSO = 1.25;
 const LAT_N = 6, LAT_S = -34.5, LON_O = -74.5, LON_L = -33.5;
 const NY = Math.round((LAT_N - LAT_S) / PASSO) + 1;
 const NX = Math.round((LON_L - LON_O) / PASSO) + 1;
+const F = 5;
+const FY = (NY - 1) * F + 1, FX = (NX - 1) * F + 1;
 
 // Escalas de cor: [valor, [r,g,b,a]]
 const ESCALAS = {
-  temp: [[-5, [130, 22, 146, 1]], [0, [25, 50, 220, 1]], [8, [30, 140, 255, 1]], [14, [40, 200, 200, 1]], [19, [100, 210, 80, 1]],
-    [24, [240, 230, 50, 1]], [28, [255, 170, 30, 1]], [32, [245, 90, 30, 1]], [36, [210, 20, 40, 1]], [42, [130, 0, 60, 1]]],
-  uv: [[0, [62, 167, 45, 1]], [2.5, [140, 200, 40, 1]], [4, [228, 198, 0, 1]], [6.5, [241, 139, 0, 1]], [9, [229, 50, 16, 1]], [12, [181, 103, 164, 1]]],
-  vento: [[0, [220, 240, 255, 0.35]], [10, [140, 200, 240, 1]], [20, [60, 170, 120, 1]], [35, [240, 210, 40, 1]], [50, [245, 120, 30, 1]], [70, [210, 30, 60, 1]], [100, [130, 20, 120, 1]]],
-  chuva: [[0, [0, 0, 0, 0]], [0.1, [160, 210, 255, 0.55]], [1, [70, 150, 245, 0.85]], [3, [30, 80, 220, 0.95]], [8, [130, 40, 200, 1]], [15, [220, 30, 120, 1]], [30, [180, 0, 0, 1]]],
-  umidade: [[0, [170, 90, 30, 1]], [20, [230, 160, 60, 1]], [40, [240, 230, 120, 1]], [60, [120, 210, 140, 1]], [80, [40, 150, 220, 1]], [100, [20, 60, 170, 1]]],
-  visib: [[0, [90, 90, 100, 0.95]], [1, [140, 140, 150, 0.9]], [5, [190, 190, 200, 0.7]], [10, [210, 230, 250, 0.45]], [25, [180, 225, 255, 0.25]], [50, [180, 225, 255, 0.15]]],
-  pressao: [[995, [120, 40, 160, 1]], [1003, [50, 100, 220, 1]], [1009, [60, 190, 200, 1]], [1013, [140, 210, 100, 1]], [1017, [240, 210, 60, 1]], [1022, [245, 130, 40, 1]], [1030, [200, 30, 40, 1]]],
+  temp: [[-5, [94, 60, 153, 1]], [0, [59, 82, 196, 1]], [8, [52, 136, 214, 1]], [14, [72, 186, 196, 1]], [19, [120, 198, 121, 1]],
+    [24, [236, 220, 96, 1]], [28, [246, 166, 70, 1]], [32, [232, 100, 64, 1]], [36, [200, 48, 66, 1]], [42, [128, 20, 72, 1]]],
+  uv: [[0, [92, 170, 98, 1]], [2.5, [160, 200, 80, 1]], [4, [232, 204, 72, 1]], [6.5, [240, 146, 58, 1]], [9, [220, 70, 60, 1]], [12, [150, 80, 160, 1]]],
+  vento: [[0, [80, 110, 150, 0.15]], [10, [96, 160, 210, 0.7]], [20, [90, 190, 150, 0.85]], [35, [232, 206, 80, 0.95]], [50, [240, 140, 60, 1]], [70, [214, 60, 74, 1]], [100, [130, 40, 130, 1]]],
+  chuva: [[0, [0, 0, 0, 0]], [0.1, [140, 200, 250, 0.45]], [1, [70, 150, 235, 0.8]], [3, [40, 90, 210, 0.9]], [8, [120, 60, 200, 0.95]], [15, [210, 50, 130, 1]], [30, [170, 20, 30, 1]]],
+  nuvens: [[0, [0, 0, 0, 0]], [20, [200, 205, 215, 0.12]], [50, [205, 210, 220, 0.45]], [80, [225, 228, 235, 0.75]], [100, [245, 246, 250, 0.9]]],
+  umidade: [[0, [170, 100, 50, 1]], [20, [220, 160, 80, 1]], [40, [232, 220, 130, 1]], [60, [130, 200, 150, 1]], [80, [60, 150, 210, 1]], [100, [40, 70, 160, 1]]],
+  visib: [[0, [90, 90, 100, 0.95]], [1, [140, 140, 150, 0.85]], [5, [190, 190, 200, 0.6]], [10, [210, 230, 250, 0.35]], [25, [180, 225, 255, 0.15]], [50, [180, 225, 255, 0.05]]],
+  pressao: [[995, [110, 60, 160, 1]], [1003, [60, 110, 210, 1]], [1009, [70, 180, 200, 1]], [1013, [140, 200, 120, 1]], [1017, [232, 204, 90, 1]], [1022, [240, 140, 60, 1]], [1030, [200, 50, 60, 1]]],
 };
 
 export const CAMADAS = [
-  { id: 'temperature_2m', nome: 'Temperatura', un: '°C', escala: 'temp', casas: 0 },
-  { id: 'apparent_temperature', nome: 'Sensação térmica', un: '°C', escala: 'temp', casas: 0 },
-  { id: 'uv_index', nome: 'Índice UV', un: '', escala: 'uv', casas: 0 },
-  { id: 'wind_speed_10m', nome: 'Vento', un: 'km/h', escala: 'vento', casas: 0, setas: true },
-  { id: 'precipitation', nome: 'Precipitação', un: 'mm/h', escala: 'chuva', casas: 1 },
-  { id: 'relative_humidity_2m', nome: 'Umidade', un: '%', escala: 'umidade', casas: 0 },
-  { id: 'visibility', nome: 'Visibilidade', un: 'km', escala: 'visib', casas: 0, fator: 0.001 },
-  { id: 'pressure_msl', nome: 'Pressão', un: 'hPa', escala: 'pressao', casas: 0 },
+  { id: 'temperature_2m', nome: 'Temperatura', un: '°C', escala: 'temp', casas: 0, curto: '°' },
+  { id: 'precipitation', nome: 'Chuva', un: 'mm/h', escala: 'chuva', casas: 1, curto: ' mm' },
+  { id: 'wind_speed_10m', nome: 'Vento', un: 'km/h', escala: 'vento', casas: 0, particulas: true, curto: '' },
+  { id: 'cloud_cover', nome: 'Nuvens', un: '%', escala: 'nuvens', casas: 0, curto: '%' },
+  { id: 'apparent_temperature', nome: 'Sensação', un: '°C', escala: 'temp', casas: 0, curto: '°' },
+  { id: 'relative_humidity_2m', nome: 'Umidade', un: '%', escala: 'umidade', casas: 0, curto: '%' },
+  { id: 'uv_index', nome: 'UV', un: '', escala: 'uv', casas: 0, curto: '' },
+  { id: 'pressure_msl', nome: 'Pressão', un: 'hPa', escala: 'pressao', casas: 0, curto: '' },
+  { id: 'visibility', nome: 'Visibilidade', un: 'km', escala: 'visib', casas: 0, fator: 0.001, curto: ' km' },
 ];
 
-function cor(escala, v) {
+// Tabela de cores pré-calculada (rápida para desenhar quadro a quadro)
+const tabelas = {};
+function tabelaCores(escala) {
+  if (tabelas[escala]) return tabelas[escala];
   const s = ESCALAS[escala];
-  if (v <= s[0][0]) return s[0][1];
-  for (let i = 1; i < s.length; i++) {
-    if (v <= s[i][0]) {
-      const [v0, c0] = s[i - 1], [v1, c1] = s[i];
-      const f = (v - v0) / (v1 - v0);
-      return c0.map((c, k) => c + (c1[k] - c) * f);
+  const min = s[0][0], max = s[s.length - 1][0];
+  const N = 512;
+  const t = new Uint8ClampedArray(N * 4);
+  for (let i = 0; i < N; i++) {
+    const v = min + ((max - min) * i) / (N - 1);
+    let c = s[s.length - 1][1];
+    for (let k = 1; k < s.length; k++) {
+      if (v <= s[k][0]) {
+        const [v0, c0] = s[k - 1], [v1, c1] = s[k];
+        const f = (v - v0) / (v1 - v0);
+        c = c0.map((x, j) => x + (c1[j] - x) * f);
+        break;
+      }
     }
+    t[i * 4] = c[0]; t[i * 4 + 1] = c[1]; t[i * 4 + 2] = c[2]; t[i * 4 + 3] = c[3] * 255;
   }
-  return s[s.length - 1][1];
+  return (tabelas[escala] = { t, min, max, N });
 }
 
-const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-const invMerc = (y) => (Math.atan(Math.exp(y)) * 360) / Math.PI - 90;
-
+/* ======================= Grade e interpolação ======================= */
 function aneisDe(geo) {
   const aneis = [];
   for (const f of geo.features || [geo]) {
@@ -56,7 +74,6 @@ function aneisDe(geo) {
   }
   return aneis; // [ [ [lon,lat], ... ], ... ]
 }
-
 function dentro(lon, lat, aneis) {
   let d = false;
   for (const anel of aneis) {
@@ -69,8 +86,9 @@ function dentro(lon, lat, aneis) {
 }
 
 const estado = {
-  mapa: null, overlay: null, radar: null, aneis: null, grade: null, indice: null,
-  camada: CAMADAS[0], hora: 0, horaBase: 0, pronto: false,
+  mapa: null, grade: null, indice: null, aneis: null, mascara: null,
+  camada: CAMADAS[0], hora: 0, horaBase: 0, maxHora: 24, tocando: false,
+  campo: null, particulas: null, radar: null, valores: null,
 };
 
 function montarGrade(aneis) {
@@ -91,112 +109,394 @@ function montarGrade(aneis) {
   return { pontos, indice };
 }
 
-function valorNaGrade(gy, gx, valores, t, fator = 1) {
-  const y0 = Math.floor(gy), x0 = Math.floor(gx);
-  const fy = gy - y0, fx = gx - x0;
-  let soma = 0, peso = 0;
-  for (const [dy, dx, w] of [[0, 0, (1 - fy) * (1 - fx)], [0, 1, (1 - fy) * fx], [1, 0, fy * (1 - fx)], [1, 1, fy * fx]]) {
-    const y = y0 + dy, x = x0 + dx;
-    if (y < 0 || y >= NY || x < 0 || x >= NX) continue;
-    const k = estado.indice[y * NX + x];
-    if (k < 0) continue;
-    const v = valores[k]?.[t];
-    if (v == null) continue;
-    soma += v * w; peso += w;
+// Máscara suave do território (1 dentro do Brasil, 0 fora) na grade fina
+function montarMascara(aneis) {
+  const m = new Float32Array(FX * FY);
+  if (!aneis) return m.fill(1);
+  for (let y = 0; y < FY; y++) {
+    const lat = LAT_N - (y * PASSO) / F;
+    for (let x = 0; x < FX; x++) m[y * FX + x] = dentro(LON_O + (x * PASSO) / F, lat, aneis) ? 1 : 0;
   }
-  return peso > 0.05 ? (soma / peso) * fator : null;
+  return m;
 }
 
+// Catmull-Rom: curva suave que passa pelos pontos da grade (sem "manchas" quadradas)
+const cr = (p0, p1, p2, p3, t) => 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+
+// Campo fino (Float32Array FX*FY) de uma variável numa hora; NaN onde não há dados
+const camposCache = new Map();
+function campoFino(id, t, fator = 1) {
+  const chave = `${id}:${t}`;
+  if (camposCache.has(chave)) return camposCache.get(chave);
+  const valores = estado.grade.valores[id];
+  const g = (iy, ix) => {
+    if (iy < 0 || iy >= NY || ix < 0 || ix >= NX) return NaN;
+    const k = estado.indice[iy * NX + ix];
+    const v = k < 0 ? null : valores?.[k]?.[t];
+    return v == null ? NaN : v * fator;
+  };
+  // Preenche buracos da grade grossa com a média dos vizinhos (evita bordas serrilhadas)
+  const grossa = new Float32Array(NX * NY);
+  for (let iy = 0; iy < NY; iy++) {
+    for (let ix = 0; ix < NX; ix++) {
+      let v = g(iy, ix);
+      if (Number.isNaN(v)) {
+        let s = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const w = g(iy + dy, ix + dx); if (!Number.isNaN(w)) { s += w; n++; } }
+        v = n ? s / n : NaN;
+      }
+      grossa[iy * NX + ix] = v;
+    }
+  }
+  const G = (iy, ix) => grossa[Math.min(NY - 1, Math.max(0, iy)) * NX + Math.min(NX - 1, Math.max(0, ix))];
+  const fino = new Float32Array(FX * FY);
+  const linha = [0, 0, 0, 0];
+  const minimo = id === 'precipitation' || id === 'cloud_cover' || id === 'uv_index' || id === 'wind_speed_10m' ? 0 : -Infinity;
+  for (let y = 0; y < FY; y++) {
+    const iy = Math.floor(y / F), fy = (y % F) / F;
+    for (let x = 0; x < FX; x++) {
+      const ix = Math.floor(x / F), fx = (x % F) / F;
+      let ok = true;
+      for (let k = -1; k <= 2; k++) {
+        const a = G(iy + k, ix - 1), b = G(iy + k, ix), c = G(iy + k, ix + 1), d = G(iy + k, ix + 2);
+        if (Number.isNaN(a + b + c + d)) { ok = false; break; }
+        linha[k + 1] = cr(a, b, c, d, fx);
+      }
+      let v;
+      if (ok) v = cr(linha[0], linha[1], linha[2], linha[3], fy);
+      else {
+        // Perto da borda dos dados: interpolação bilinear com o que houver
+        let s = 0, w = 0;
+        for (const [dy, dx, p] of [[0, 0, (1 - fy) * (1 - fx)], [0, 1, (1 - fy) * fx], [1, 0, fy * (1 - fx)], [1, 1, fy * fx]]) {
+          const q = G(iy + dy, ix + dx);
+          if (!Number.isNaN(q)) { s += q * p; w += p; }
+        }
+        v = w > 0.01 ? s / w : NaN;
+      }
+      fino[y * FX + x] = Math.max(minimo, v);
+    }
+  }
+  if (camposCache.size > 120) camposCache.delete(camposCache.keys().next().value);
+  camposCache.set(chave, fino);
+  return fino;
+}
+
+function amostra(campo, fy, fx) {
+  if (fy < 0 || fx < 0 || fy > FY - 1 || fx > FX - 1) return NaN;
+  const y0 = Math.floor(fy), x0 = Math.floor(fx);
+  const y1 = Math.min(FY - 1, y0 + 1), x1 = Math.min(FX - 1, x0 + 1);
+  const ty = fy - y0, tx = fx - x0;
+  const a = campo[y0 * FX + x0], b = campo[y0 * FX + x1], c = campo[y1 * FX + x0], d = campo[y1 * FX + x1];
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+const paraFino = (lat, lon) => [((LAT_N - lat) / PASSO) * F, ((lon - LON_O) / PASSO) * F];
+
+// Valor de uma camada num ponto e num instante (horas podem ser fracionárias)
+function valorCampo(c, lat, lon, h) {
+  const t0 = Math.floor(h), f = h - t0;
+  const [fy, fx] = paraFino(lat, lon);
+  const a = amostra(campoFino(c.id, estado.horaBase + t0, c.fator), fy, fx);
+  if (f < 0.01) return a;
+  const b = amostra(campoFino(c.id, estado.horaBase + Math.min(t0 + 1, estado.maxHora), c.fator), fy, fx);
+  return a + (b - a) * f;
+}
 export function valorEm(lat, lon) {
   if (!estado.grade) return null;
-  const c = estado.camada;
-  return valorNaGrade((LAT_N - lat) / PASSO, (lon - LON_O) / PASSO, estado.grade.valores[c.id], estado.horaBase + estado.hora, c.fator);
+  const v = valorCampo(estado.camada, lat, lon, estado.hora);
+  return Number.isNaN(v) ? null : v;
 }
 
-function desenhar() {
-  if (!estado.grade || !estado.mapa) return;
-  const c = estado.camada;
-  const t = estado.horaBase + estado.hora;
-  const valores = estado.grade.valores[c.id];
-  const W = 560, H = 600;
-  const yN = merc(LAT_N), yS = merc(LAT_S);
-  const cv = document.createElement('canvas');
-  cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d');
-  const img = ctx.createImageData(W, H);
-  for (let py = 0; py < H; py++) {
-    const lat = invMerc(yN - ((py + 0.5) / H) * (yN - yS));
-    const gy = (LAT_N - lat) / PASSO;
-    for (let px = 0; px < W; px++) {
-      const lon = LON_O + ((px + 0.5) / W) * (LON_L - LON_O);
-      const v = valorNaGrade(gy, (lon - LON_O) / PASSO, valores, t, c.fator);
-      if (v == null) continue;
-      const [r, g, b, a] = cor(c.escala, v);
-      const o = (py * W + px) * 4;
-      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = a * 200;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const pxDe = (lon, lat) => [((lon - LON_O) / (LON_L - LON_O)) * W, ((yN - merc(lat)) / (yN - yS)) * H];
-
-  if (c.setas) {
-    const dirs = estado.grade.valores.wind_direction_10m;
-    ctx.strokeStyle = 'rgba(20,30,50,.75)'; ctx.fillStyle = 'rgba(20,30,50,.75)'; ctx.lineWidth = 1.3;
-    for (let iy = 0; iy < NY; iy++) {
-      for (let ix = 0; ix < NX; ix++) {
-        const k = estado.indice[iy * NX + ix];
-        if (k < 0) continue;
-        const lat = LAT_N - iy * PASSO, lon = LON_O + ix * PASSO;
-        if (estado.aneis && !dentro(lon, lat, estado.aneis)) continue;
-        const d = dirs[k]?.[t]; if (d == null) continue;
-        const [x, y] = pxDe(lon, lat);
-        const ang = ((d + 180) * Math.PI) / 180; // para onde o vento sopra
-        const dx = Math.sin(ang) * 6, dy = -Math.cos(ang) * 6;
-        ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x + dx, y + dy); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x + dx, y + dy);
-        ctx.lineTo(x + dx - Math.sin(ang - 0.5) * 4, y + dy + Math.cos(ang - 0.5) * 4);
-        ctx.lineTo(x + dx - Math.sin(ang + 0.5) * 4, y + dy + Math.cos(ang + 0.5) * 4);
-        ctx.closePath(); ctx.fill();
+/* ======================= Camada de cor (canvas do tamanho da tela) ======================= */
+const CamadaCampo = L.Layer.extend({
+  onAdd(mapa) {
+    this._canvas = L.DomUtil.create('canvas', 'camada-campo leaflet-zoom-animated');
+    mapa.getPane('camadaTempo').appendChild(this._canvas);
+    mapa.on('moveend zoomend resize viewreset', this._reset, this);
+    mapa.on('zoomanim', this._animarZoom, this);
+    this._reset();
+  },
+  onRemove(mapa) {
+    this._canvas.remove();
+    mapa.off('moveend zoomend resize viewreset', this._reset, this);
+    mapa.off('zoomanim', this._animarZoom, this);
+  },
+  _animarZoom(e) {
+    if (!this._limites) return;
+    const escala = this._map.getZoomScale(e.zoom);
+    const pos = this._map._latLngBoundsToNewLayerBounds(this._limites, e.zoom, e.center).min;
+    L.DomUtil.setTransform(this._canvas, pos, escala);
+  },
+  _reset() {
+    const mapa = this._map;
+    const tam = mapa.getSize();
+    this._limites = mapa.getBounds();
+    L.DomUtil.setPosition(this._canvas, mapa.containerPointToLayerPoint([0, 0]));
+    // Meia resolução da tela (o navegador suaviza ao ampliar): leve e sem serrilhado
+    const q = Math.min(0.6 * (window.devicePixelRatio || 1), 1);
+    this._canvas.width = Math.max(1, Math.round(tam.x * q));
+    this._canvas.height = Math.max(1, Math.round(tam.y * q));
+    this._canvas.style.width = `${tam.x}px`;
+    this._canvas.style.height = `${tam.y}px`;
+    // Coordenadas de cada coluna e linha na grade fina
+    const W = this._canvas.width, H = this._canvas.height;
+    this._fx = new Float32Array(W);
+    this._fy = new Float32Array(H);
+    for (let x = 0; x < W; x++) this._fx[x] = paraFino(0, mapa.containerPointToLatLng([((x + 0.5) / W) * tam.x, 0]).lng)[1];
+    for (let y = 0; y < H; y++) this._fy[y] = paraFino(mapa.containerPointToLatLng([0, ((y + 0.5) / H) * tam.y]).lat, 0)[0];
+    this._img = null;
+    this.redesenhar();
+  },
+  redesenhar() {
+    if (!estado.grade || !this._map) return;
+    const c = estado.camada;
+    const W = this._canvas.width, H = this._canvas.height;
+    const ctx = this._canvas.getContext('2d');
+    if (!this._img || this._img.width !== W) this._img = ctx.createImageData(W, H);
+    const d = this._img.data;
+    const h = estado.hora, t0 = Math.floor(h), fr = h - t0;
+    const A = campoFino(c.id, estado.horaBase + t0, c.fator);
+    const B = fr > 0.01 ? campoFino(c.id, estado.horaBase + Math.min(t0 + 1, estado.maxHora), c.fator) : null;
+    const M = estado.mascara;
+    const { t: tab, min, max, N } = tabelaCores(c.escala);
+    const k = (N - 1) / (max - min);
+    const opac = c.escala === 'nuvens' ? 1 : 0.78;
+    for (let y = 0; y < H; y++) {
+      const fy = this._fy[y];
+      const linhaFora = fy < 0 || fy > FY - 1;
+      const y0 = Math.floor(fy), y1 = Math.min(FY - 1, y0 + 1), ty = fy - y0;
+      for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 4;
+        const fx = this._fx[x];
+        if (linhaFora || fx < 0 || fx > FX - 1) { d[o + 3] = 0; continue; }
+        const x0 = Math.floor(fx), x1 = Math.min(FX - 1, x0 + 1), tx = fx - x0;
+        const i00 = y0 * FX + x0, i01 = y0 * FX + x1, i10 = y1 * FX + x0, i11 = y1 * FX + x1;
+        const w00 = (1 - tx) * (1 - ty), w01 = tx * (1 - ty), w10 = (1 - tx) * ty, w11 = tx * ty;
+        const m = M[i00] * w00 + M[i01] * w01 + M[i10] * w10 + M[i11] * w11;
+        if (m < 0.02) { d[o + 3] = 0; continue; }
+        let v = A[i00] * w00 + A[i01] * w01 + A[i10] * w10 + A[i11] * w11;
+        if (B) v += ((B[i00] * w00 + B[i01] * w01 + B[i10] * w10 + B[i11] * w11) - v) * fr;
+        if (Number.isNaN(v)) { d[o + 3] = 0; continue; }
+        const j = Math.max(0, Math.min(N - 1, Math.round((v - min) * k))) * 4;
+        d[o] = tab[j]; d[o + 1] = tab[j + 1]; d[o + 2] = tab[j + 2];
+        d[o + 3] = tab[j + 3] * opac * Math.min(1, m * 1.6);
       }
     }
-  }
+    ctx.putImageData(this._img, 0, 0);
+  },
+});
 
-  // Recorta pelo contorno do Brasil
-  if (estado.aneis) {
+/* ======================= Partículas de vento ======================= */
+const CamadaVento = L.Layer.extend({
+  onAdd(mapa) {
+    this._canvas = L.DomUtil.create('canvas', 'camada-vento');
+    mapa.getPane('camadaVento').appendChild(this._canvas);
+    mapa.on('movestart zoomstart', this._parar, this);
+    mapa.on('moveend zoomend resize', this._reset, this);
+    this._reset();
+  },
+  onRemove(mapa) {
+    this._parar();
+    this._canvas.remove();
+    mapa.off('movestart zoomstart', this._parar, this);
+    mapa.off('moveend zoomend resize', this._reset, this);
+  },
+  _parar() {
+    cancelAnimationFrame(this._quadro);
+    this._quadro = null;
+    if (this._canvas) this._canvas.getContext('2d').clearRect(0, 0, this._canvas.width, this._canvas.height);
+  },
+  _reset() {
+    this._parar();
+    const mapa = this._map;
+    const tam = mapa.getSize();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    L.DomUtil.setPosition(this._canvas, mapa.containerPointToLayerPoint([0, 0]));
+    this._canvas.width = tam.x * dpr; this._canvas.height = tam.y * dpr;
+    this._canvas.style.width = `${tam.x}px`; this._canvas.style.height = `${tam.y}px`;
+    this._dpr = dpr; this._tam = tam;
+    const n = Math.round(Math.min(2600, (tam.x * tam.y) / 420));
+    this._p = Array.from({ length: n }, () => this._nova({}));
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this._quadro = requestAnimationFrame(() => this._passo());
+  },
+  _nova(p) {
+    p.x = Math.random() * this._tam.x; p.y = Math.random() * this._tam.y; p.idade = Math.floor(Math.random() * 80);
+    return p;
+  },
+  _passo() {
+    const ctx = this._canvas.getContext('2d');
+    const mapa = this._map;
+    if (!estado.grade || !mapa) return;
+    ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+    // Apaga devagar o quadro anterior: forma o rastro
     ctx.globalCompositeOperation = 'destination-in';
+    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillRect(0, 0, this._tam.x, this._tam.y);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = temaEscuro() ? 'rgba(255,255,255,0.7)' : 'rgba(30,32,38,0.55)';
     ctx.beginPath();
-    for (const anel of estado.aneis) {
-      anel.forEach(([lon, lat], i) => { const [x, y] = pxDe(lon, lat); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
-      ctx.closePath();
+    const h = estado.hora, hb = estado.horaBase;
+    const t0 = Math.floor(h), fr = h - t0;
+    const S0 = campoFino('wind_speed_10m', hb + t0), D0 = campoFino('wind_direction_10m', hb + t0);
+    const S1 = fr > 0.01 ? campoFino('wind_speed_10m', hb + Math.min(t0 + 1, estado.maxHora)) : null;
+    for (const p of this._p) {
+      if (p.idade++ > 90) { this._nova(p); p.idade = 0; continue; }
+      const ll = mapa.containerPointToLatLng([p.x, p.y]);
+      const [fy, fx] = paraFino(ll.lat, ll.lng);
+      const m = amostra(estado.mascara, fy, fx);
+      let s = amostra(S0, fy, fx);
+      if (S1) s += (amostra(S1, fy, fx) - s) * fr;
+      const dir = amostra(D0, fy, fx);
+      if (!(m > 0.3) || Number.isNaN(s) || Number.isNaN(dir)) { this._nova(p); continue; }
+      // Direção meteorológica = de onde o vento vem; a partícula vai para o lado oposto
+      const ang = ((dir + 180) * Math.PI) / 180;
+      const vel = 0.25 + s * 0.12; // pixels por quadro, igual em qualquer zoom
+      const nx = p.x + Math.sin(ang) * vel, ny = p.y - Math.cos(ang) * vel;
+      ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny);
+      p.x = nx; p.y = ny;
+      if (nx < 0 || ny < 0 || nx > this._tam.x || ny > this._tam.y) this._nova(p);
     }
-    ctx.fill('evenodd');
-  }
+    ctx.stroke();
+    this._quadro = requestAnimationFrame(() => this._passo());
+  },
+});
 
-  const url = cv.toDataURL();
-  const limites = [[LAT_S, LON_O], [LAT_N, LON_L]];
-  if (estado.overlay) estado.overlay.setUrl(url);
-  else estado.overlay = L.imageOverlay(url, limites, { opacity: 0.85, pane: 'camadaTempo', interactive: false }).addTo(estado.mapa);
-  renderLegenda();
+/* ======================= Valores sobre as cidades ======================= */
+let cidades = null;
+const listaCidades = () => (cidades ||= getJSON('dados/cidades.json', 30000)
+  .then((d) => d.cidades.map(([nome, uf, lat, lon, pop, capital]) => ({ nome, uf, lat, lon, pop, capital })))
+  .catch((e) => { cidades = null; throw e; }));
+
+const CamadaValores = L.Layer.extend({
+  onAdd(mapa) {
+    this._caixa = L.DomUtil.create('div', 'camada-valores');
+    mapa.getPane('valores').appendChild(this._caixa);
+    mapa.on('moveend zoomend resize', this.redesenhar, this);
+    listaCidades().then((l) => { this._lista = l; this.redesenhar(); }).catch(() => {});
+  },
+  onRemove(mapa) { this._caixa.remove(); mapa.off('moveend zoomend resize', this.redesenhar, this); },
+  redesenhar() {
+    const mapa = this._map;
+    if (!mapa || !this._lista || !estado.grade) return;
+    const z = mapa.getZoom();
+    const minPop = z < 5 ? Infinity : z < 6 ? 400000 : z < 7 ? 120000 : z < 8 ? 40000 : 10000;
+    const tam = mapa.getSize();
+    const c = estado.camada;
+    const ocupados = [];
+    let html = '';
+    L.DomUtil.setPosition(this._caixa, mapa.containerPointToLayerPoint([0, 0]));
+    for (const cid of this._lista) {
+      if (ocupados.length > 70) break;
+      if (!cid.capital && cid.pop < minPop) continue;
+      const p = mapa.latLngToContainerPoint([cid.lat, cid.lon]);
+      if (p.x < 20 || p.y < 20 || p.x > tam.x - 20 || p.y > tam.y - 20) continue;
+      const caixa = [p.x - 26, p.y - 34, p.x + 26, p.y + 4];
+      if (ocupados.some((o) => caixa[0] < o[2] && caixa[2] > o[0] && caixa[1] < o[3] && caixa[3] > o[1])) continue;
+      const v = valorCampo(c, cid.lat, cid.lon, estado.hora);
+      if (Number.isNaN(v)) continue;
+      ocupados.push(caixa);
+      html += `<span class="valor-cidade" style="transform:translate(${Math.round(p.x)}px,${Math.round(p.y)}px)" title="${esc(cid.nome)}">${num(v, c.casas)}${c.curto}</span>`;
+    }
+    this._caixa.innerHTML = html;
+  },
+});
+
+/* ======================= Radar animado ======================= */
+async function ligarRadar(ligar) {
+  const r = estado.radar;
+  if (r) { clearInterval(r.timer); r.camadas.forEach((c) => estado.mapa.removeLayer(c)); estado.radar = null; }
+  $('radar-info').textContent = '';
+  if (!ligar) return;
+  try {
+    const { host, quadros } = await radarQuadros();
+    const ultimos = quadros.filter((q) => q.path).slice(-8);
+    if (!ultimos.length) throw new Error('sem quadros');
+    // Quadros de 512 px (o RainViewer gratuito vai até o zoom 7, que aqui equivale ao zoom 8 do mapa)
+    const camadas = ultimos.map((q) => L.tileLayer(`${host}${q.path}/512/{z}/{x}/{y}/2/1_1.png`, {
+      tileSize: 512, zoomOffset: -1, minNativeZoom: 1, maxNativeZoom: 8, maxZoom: 16, opacity: 0, pane: 'camadaRadar',
+      className: 'radar-quadro', attribution: '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>',
+    }).addTo(estado.mapa));
+    const rad = { camadas, i: camadas.length - 1, timer: null };
+    estado.radar = rad;
+    const mostrar = (i) => {
+      camadas.forEach((c, k) => c.setOpacity(k === i ? 0.85 : 0));
+      $('radar-info').textContent = new Date(ultimos[i].time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    };
+    mostrar(rad.i);
+    // Passa pelos últimos quadros (de 10 em 10 minutos) com transição suave; para 2 s no mais recente
+    let pausa = 0;
+    rad.timer = setInterval(() => {
+      if (document.hidden) return;
+      if (rad.i === camadas.length - 1 && pausa++ < 3) return;
+      pausa = 0;
+      rad.i = (rad.i + 1) % camadas.length;
+      mostrar(rad.i);
+    }, 650);
+  } catch (e) {
+    console.warn(e);
+    $('radar-info').textContent = 'indisponível';
+    $('radar-check').checked = false;
+  }
+}
+
+/* ======================= Desenho, legenda e linha do tempo ======================= */
+function atualizar() {
+  estado.campo?.redesenhar();
+  estado.valores?.redesenhar();
   renderHora();
+}
+
+function trocarCamada(c) {
+  estado.camada = c;
+  [...$('mapa-camadas').children].forEach((x) => x.setAttribute('aria-pressed', String(CAMADAS[+x.dataset.i] === c)));
+  if (c.particulas && !estado.particulas) estado.particulas = new CamadaVento().addTo(estado.mapa);
+  if (!c.particulas && estado.particulas) { estado.mapa.removeLayer(estado.particulas); estado.particulas = null; }
+  renderLegenda();
+  atualizar();
 }
 
 function renderLegenda() {
   const c = estado.camada;
   const s = ESCALAS[c.escala];
   const min = s[0][0], max = s[s.length - 1][0];
-  const grad = s.map(([v, [r, g, b, a]]) => `rgba(${r},${g},${b},${Math.max(a, 0.25)}) ${((v - min) / (max - min)) * 100}%`).join(',');
+  const grad = s.map(([v, [r, g, b, a]]) => `rgba(${r},${g},${b},${Math.max(a, 0.35)}) ${((v - min) / (max - min)) * 100}%`).join(',');
   const marcas = [s[0], s[Math.floor(s.length / 3)], s[Math.floor((2 * s.length) / 3)], s[s.length - 1]].map(([v]) => v);
-  $('mapa-legenda').innerHTML = `<div class="leg-titulo">${esc(c.nome)}${c.un ? ` (${c.un})` : ''}</div>
+  $('mapa-legenda').innerHTML = `<div class="leg-titulo">${esc(c.nome)}${c.un ? ` <span>${c.un}</span>` : ''}</div>
     <div class="leg-barra" style="background:linear-gradient(90deg,${grad})"></div>
     <div class="leg-marcas">${marcas.map((m) => `<span>${m}</span>`).join('')}</div>`;
 }
 
 function renderHora() {
-  const iso = estado.grade.tempo[estado.horaBase + estado.hora];
-  const d = new Date(`${iso}:00Z`);
-  $('mapa-hora-rotulo').textContent = estado.hora === 0
-    ? `Agora · ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-    : d.toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  if (!estado.grade) return;
+  const t = estado.horaBase + estado.hora;
+  const iso = estado.grade.tempo[Math.floor(t)];
+  const d = new Date(Date.parse(`${iso}:00Z`) + (t - Math.floor(t)) * 3600000);
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  $('mapa-hora-rotulo').textContent = estado.hora < 0.5 && !estado.tocando ? `Agora · ${hora}`
+    : `${d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} ${hora}`;
+  $('mapa-hora').value = String(estado.hora);
+}
+
+function tocar(sim) {
+  estado.tocando = sim;
+  const b = $('mapa-tocar');
+  b.setAttribute('aria-pressed', String(sim));
+  b.setAttribute('aria-label', sim ? 'Pausar animação' : 'Animar as próximas 24 horas');
+  b.innerHTML = sim ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  if (!sim) { estado.hora = Math.round(estado.hora * 4) / 4; atualizar(); return; }
+  let antes = performance.now();
+  let ultimoValores = 0;
+  const passo = (agora) => {
+    if (!estado.tocando) return;
+    const dt = Math.min(100, agora - antes); antes = agora;
+    estado.hora += dt / 650; // uma hora a cada 0,65 s
+    if (estado.hora > estado.maxHora) estado.hora = 0;
+    estado.campo?.redesenhar();
+    if (agora - ultimoValores > 250) { estado.valores?.redesenhar(); ultimoValores = agora; }
+    renderHora();
+    requestAnimationFrame(passo);
+  };
+  requestAnimationFrame(passo);
 }
 
 async function carregarDados() {
@@ -210,81 +510,46 @@ async function carregarDados() {
     const g = montarGrade(aneis);
     estado.indice = g.indice;
     estado.grade = await gradeMapa(g.pontos);
+    estado.mascara = montarMascara(aneis);
     const agora = new Date(); agora.setUTCMinutes(0, 0, 0);
     const isoAgora = agora.toISOString().slice(0, 13);
     const i = estado.grade.tempo.findIndex((t) => t.slice(0, 13) >= isoAgora);
     estado.horaBase = Math.max(0, i);
-    const maxH = Math.min(24, estado.grade.tempo.length - 1 - estado.horaBase);
-    $('mapa-hora').max = String(maxH);
+    estado.maxHora = Math.min(24, estado.grade.tempo.length - 1 - estado.horaBase);
+    $('mapa-hora').max = String(estado.maxHora);
     st.hidden = true;
-    desenhar();
+    estado.campo = new CamadaCampo().addTo(estado.mapa);
+    estado.valores = new CamadaValores().addTo(estado.mapa);
+    trocarCamada(estado.camada);
   } catch (e) {
     console.error(e);
     st.textContent = 'Não foi possível carregar os dados do mapa agora. Tente novamente mais tarde.';
   }
 }
 
-async function alternarRadar(ligar) {
-  if (estado.radar) { estado.mapa.removeLayer(estado.radar); estado.radar = null; }
-  if (!ligar) return;
-  try {
-    const { host, quadros } = await radarQuadros();
-    const ultimo = quadros.filter((q) => q.path).pop();
-    if (!ultimo) throw new Error('sem quadros');
-    estado.radar = L.tileLayer(`${host}${ultimo.path}/256/{z}/{x}/{y}/2/1_1.png`, {
-      opacity: 0.8, maxNativeZoom: 7, maxZoom: 12, pane: 'camadaRadar',
-      attribution: '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>',
-    }).addTo(estado.mapa);
-    $('radar-info').textContent = `Radar de ${new Date(ultimo.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-  } catch (e) {
-    console.warn(e);
-    $('radar-info').textContent = 'Radar indisponível agora.';
-    $('radar-check').checked = false;
-  }
-}
-
-// rotulos: false = sem os nomes do mapa de fundo (o mapa de alertas escreve os próprios nomes de cidades)
-export function basemap(mapa, { rotulos = true } = {}) {
-  const escuro = matchMedia('(prefers-color-scheme: dark)').matches;
-  const estilo = escuro ? 'dark' : 'light';
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}_nolabels/{z}/{x}/{y}{r}.png`, {
-    subdomains: 'abcd', maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
-  }).addTo(mapa);
-  if (!rotulos) return;
-  mapa.createPane('rotulos');
-  mapa.getPane('rotulos').style.zIndex = 650;
-  mapa.getPane('rotulos').style.pointerEvents = 'none';
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}_only_labels/{z}/{x}/{y}{r}.png`, { subdomains: 'abcd', maxZoom: 18, pane: 'rotulos' }).addTo(mapa);
-}
-
-export async function linhasEstados(mapa) {
-  try {
-    const geo = await contornoEstados();
-    L.geoJSON(geo, { interactive: false, style: { color: getComputedStyle(document.body).getPropertyValue('--linha-mapa').trim() || '#555', weight: 1, opacity: 0.6, fill: false }, pane: 'linhas' }).addTo(mapa);
-  } catch (e) { console.warn('Contorno dos estados indisponível', e); }
-}
-
 export function iniciarMapas(abrirPonto) {
   if (estado.mapa) { estado.mapa.invalidateSize(); return; }
-  const mapa = L.map('mapa-tempo', { zoomControl: true, attributionControl: true, minZoom: 3, maxZoom: 11, zoomSnap: 0.5 })
+  const mapa = L.map('mapa-tempo', { zoomControl: false, attributionControl: true, minZoom: 3, maxZoom: 14, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 })
     .fitBounds([[-33.8, -74], [5.3, -34.8]]);
+  L.control.zoom({ position: 'bottomright' }).addTo(mapa);
+  mapa.attributionControl.setPrefix(false);
   estado.mapa = mapa;
   mapa.createPane('camadaTempo').style.zIndex = 380;
   mapa.createPane('camadaRadar').style.zIndex = 390;
-  mapa.createPane('linhas').style.zIndex = 400;
+  mapa.createPane('camadaVento').style.zIndex = 395;
+  mapa.getPane('camadaVento').style.pointerEvents = 'none';
+  mapa.createPane('valores').style.zIndex = 660;
+  mapa.getPane('valores').style.pointerEvents = 'none';
   basemap(mapa);
-  linhasEstados(mapa);
 
-  $('mapa-camadas').innerHTML = CAMADAS.map((c, i) => `<button type="button" data-i="${i}" class="chip${i === 0 ? ' ativo' : ''}">${c.nome}</button>`).join('');
+  $('mapa-camadas').innerHTML = CAMADAS.map((c, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}">${c.nome}</button>`).join('');
   $('mapa-camadas').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    estado.camada = CAMADAS[+b.dataset.i];
-    [...$('mapa-camadas').children].forEach((x) => x.classList.toggle('ativo', x === b));
-    desenhar();
+    trocarCamada(CAMADAS[+b.dataset.i]);
   });
-  $('mapa-hora').addEventListener('input', (e) => { estado.hora = +e.target.value; desenhar(); });
-  $('radar-check').addEventListener('change', (e) => alternarRadar(e.target.checked));
+  $('mapa-hora').addEventListener('input', (e) => { tocar(false); estado.hora = +e.target.value; atualizar(); });
+  $('mapa-tocar').addEventListener('click', () => tocar(!estado.tocando));
+  $('radar-check').addEventListener('change', (e) => ligarRadar(e.target.checked));
 
   mapa.on('click', (e) => {
     const { lat, lng } = e.latlng;
@@ -293,15 +558,20 @@ export function iniciarMapas(abrirPonto) {
     const conteudo = document.createElement('div');
     conteudo.className = 'popup';
     let texto = v == null ? 'Sem dados neste ponto.' : `<strong>${num(v, c.casas)} ${c.un}</strong> ${esc(c.nome.toLowerCase())}`;
-    if (v != null && c.setas) {
-      const k = (LAT_N - lat) / PASSO, j = (lng - LON_O) / PASSO;
-      const d = valorNaGrade(k, j, estado.grade.valores.wind_direction_10m, estado.horaBase + estado.hora);
-      if (d != null) texto += ` vindo de ${direcao(d)}`;
+    if (v != null && c.particulas) {
+      const [fy, fx] = paraFino(lat, lng);
+      const d = amostra(campoFino('wind_direction_10m', estado.horaBase + Math.floor(estado.hora)), fy, fx);
+      if (!Number.isNaN(d)) texto += ` vindo de ${direcao(d)}`;
     }
     conteudo.innerHTML = `<p>${texto}</p><p class="pequeno">Valor aproximado da região</p><button type="button" class="btn">Ver previsão deste ponto</button>`;
-    conteudo.querySelector('button').addEventListener('click', () => { mapa.closePopup(); abrirPonto(lat, lng); });
+    conteudo.querySelector('button').addEventListener('click', () => { mapa.closePopup(); tocar(false); abrirPonto(lat, lng); });
     L.popup().setLatLng(e.latlng).setContent(conteudo).openOn(mapa);
   });
 
   carregarDados();
+}
+
+// Para a animação quando a aba de mapas some (economiza bateria)
+export function pausarMapas() {
+  if (estado.tocando) tocar(false);
 }

@@ -4,8 +4,18 @@ import {
   carregarMunicipios, buscarLocal, buscarOpenMeteo, coordenadas, previsao, qualidadeAr,
   todosAlertas, alertaAfetaCidade, posicaoAtual, cidadeDaPosicao, municipioPorId,
 } from './dados.js';
-import { renderAgora, renderChuvaProxima, renderWidgets, renderHoras, renderDias, renderFontes, renderAlertasCidade } from './previsao.js';
-import { iniciarMapas } from './mapas.js';
+import { renderAgora, renderResumo, renderChuvaProxima, renderWidgets, renderHoras, renderDias, renderFontes, renderAlertasCidade } from './previsao.js';
+import { iniciarMapas, pausarMapas } from './mapas.js';
+import { icone } from './icones.js';
+
+// Ícones fixos da página (lupa, localização, barra inferior)
+document.querySelectorAll('[data-icone]').forEach((el) => { el.innerHTML = icone(el.dataset.icone); });
+
+// Altura real do topo: os mapas ocupam exatamente o resto da tela
+const topo = document.getElementById('topo');
+const medirTopo = () => document.documentElement.style.setProperty('--altura-topo', `${topo.offsetHeight}px`);
+medirTopo();
+if ('ResizeObserver' in window) new ResizeObserver(medirTopo).observe(topo);
 import { iniciarAlertasMapa } from './alertasMapa.js';
 
 function setStatus(msg, erro = false) {
@@ -29,6 +39,7 @@ function mostrarAba(aba) {
     document.querySelectorAll(`a[data-aba="${a}"]`).forEach((b) => b.setAttribute('aria-current', a === aba ? 'page' : 'false'));
   }
   document.body.dataset.aba = aba;
+  if (aba !== 'mapas') pausarMapas();
   window.scrollTo({ top: rolagemDaAba[aba] || 0 });
   if (aba === 'mapas') requestAnimationFrame(() => iniciarMapas(abrirPonto));
   if (aba === 'alertas') requestAnimationFrame(() => iniciarAlertasMapa());
@@ -90,7 +101,8 @@ async function abrirCidade(cidade, { trocarAba = true } = {}) {
     ]);
     if (meu !== pedido) return;
     renderAgora(prev, c);
-    renderAlertasCidade(alertas, c, alertaAfetaCidade);
+    const alertasDaCidade = renderAlertasCidade(alertas, c, alertaAfetaCidade);
+    renderResumo(prev, alertasDaCidade);
     renderChuvaProxima(prev);
     renderWidgets(prev, ar);
     renderHoras(prev);

@@ -434,7 +434,7 @@ function limparCacheVelho() {
     const agora = Date.now();
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar):/.test(k)) continue;
+      if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar|grade\d*):/.test(k)) continue;
       const v = store.get(k);
       if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:prev\d*:/.test(k)) localStorage.removeItem(k);
     }
