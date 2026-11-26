@@ -141,18 +141,50 @@ def iso(d):
     return d.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ') if d else None
 
 
-def poligono_cap(texto, max_pontos=300):
+def simplificar(pontos, tolerancia):
+    """Douglas-Peucker: tira pontos que quase não mudam o desenho."""
+    if len(pontos) < 4:
+        return pontos
+    manter = [False] * len(pontos)
+    manter[0] = manter[-1] = True
+    pilha = [(0, len(pontos) - 1)]
+    while pilha:
+        i, j = pilha.pop()
+        (y1, x1), (y2, x2) = pontos[i], pontos[j]
+        dy, dx = y2 - y1, x2 - x1
+        norma = (dx * dx + dy * dy) ** 0.5 or 1e-12
+        maior, k = 0, None
+        for n in range(i + 1, j):
+            y, x = pontos[n]
+            d = abs(dy * (x - x1) - dx * (y - y1)) / norma
+            if d > maior:
+                maior, k = d, n
+        if k is not None and maior > tolerancia:
+            manter[k] = True
+            pilha += [(i, k), (k, j)]
+    return [p for p, m in zip(pontos, manter) if m]
+
+
+def poligono_cap(texto):
     pontos = []
     for par in (texto or '').split():
         try:
             lat, lon = (float(x) for x in par.split(',')[:2])
         except ValueError:
             continue
-        pontos.append([round(lat, 4), round(lon, 4)])
-    if len(pontos) > max_pontos:  # simplifica para o arquivo não ficar enorme
-        passo = len(pontos) / max_pontos
-        pontos = [pontos[int(i * passo)] for i in range(max_pontos)] + [pontos[-1]]
+        pontos.append([lat, lon])
     return pontos if len(pontos) >= 3 else None
+
+
+def reduzir_poligonos(aneis, max_pontos=500):
+    """Deixa os polígonos leves para o celular: no máximo ~500 pontos por alerta."""
+    tol = 0.002  # ~200 m
+    while True:
+        res = [s for s in (simplificar(a, tol) for a in aneis) if len(s) >= 4]
+        if sum(len(a) for a in res) <= max_pontos or tol > 0.2:
+            break
+        tol *= 2
+    return [[[round(lat, 3), round(lon, 3)] for lat, lon in a] for a in res]
 
 
 SEVERIDADE_CAP = {
@@ -200,6 +232,8 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
             for v in re.findall(r'\d{6,7}', txt(g, 'value')):
                 if v[:2] in UF_POR_CODIGO and v not in geocodes:
                     geocodes.append(v)
+    # Com código IBGE o app desenha o contorno oficial do município; sem ele, usa o polígono (simplificado)
+    poligonos = [] if geocodes else reduzir_poligonos(poligonos)
     estados = []
     for g in geocodes:
         uf = UF_POR_CODIGO[g[:2]]
@@ -221,9 +255,16 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     titulo = headline or txt(info, 'event') or 'Alerta'
     if len(titulo) > 140:
         titulo = (txt(info, 'event') or titulo[:137] + '…')
+    partes = [x for x in descricao.split('\n') if x.strip()]
+    if len(partes) > 1 and re.match(r'defesa civil\s*:', sem_acento(partes[0])):
+        descricao = '\n'.join(partes[1:])  # a 1ª linha costuma ser a versão SMS (sem acentos) do mesmo texto
     riscos = linhas(descricao) if descricao and descricao.strip() != headline.strip() else []
     if headline and len(headline) > 140:
         riscos.insert(0, headline)
+    if titulo.isupper():
+        titulo = titulo.capitalize()
+    if areas and len(titulo) < 40:
+        titulo = f"{titulo} – {', '.join(areas)}"[:140]
     web = txt(info, 'web')
     return {
         'id': f'{fonte_id}-{identificador}',
@@ -300,56 +341,9 @@ def fonte_defesa_civil():
     return alertas
 
 
-RISCOS_CEMADEN = {
-    'hidrol': ('Possibilidade de inundação, enxurrada ou alagamento.',),
-    'movimento': ('Possibilidade de deslizamento de terra, queda de barreira ou desabamento.',),
-}
-NIVEL_CEMADEN = {'moderado': (1, AMARELO), 'alto': (2, LARANJA), 'muito alto': (3, VERMELHO)}
-
-
-def fonte_cemaden():
-    """Alertas de risco geo-hidrológico que o Cemaden envia às Defesas Civis (painel público)."""
-    dados = json.loads(baixar('https://painelalertas.cemaden.gov.br/wsAlertas2', timeout=60))
-    lista = dados.get('alertas', []) if isinstance(dados, dict) else dados
-    alertas = []
-    for r in lista or []:
-        if str(r.get('status', 1)) != '1':
-            continue
-        evento = str(r.get('evento') or 'Alerta de risco')
-        tipo = evento.split(' - ')[0].strip()
-        nivel_txt = str(r.get('nivel') or (evento.split(' - ')[1] if ' - ' in evento else '')).strip()
-        nivel, cor = NIVEL_CEMADEN.get(sem_acento(nivel_txt), (1, AMARELO))
-        cod = str(r.get('codibge') or '')
-        uf = str(r.get('uf') or UF_POR_CODIGO.get(cod[:2], '')).upper()
-        municipio = str(r.get('municipio') or '').title()
-        criado = r.get('datahoracriacao') or r.get('ult_atualizacao')
-        inicio = None
-        if criado:
-            m = re.match(r'(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)', str(criado))
-            if m:
-                inicio = datetime.fromisoformat(f'{m[1]}T{m[2]}').replace(tzinfo=BRT)
-        riscos = next((v for k, v in RISCOS_CEMADEN.items() if k in sem_acento(tipo)), ())
-        alertas.append({
-            'id': f"cemaden-{r.get('cod_alerta')}",
-            'fonteId': 'cemaden',
-            'fonte': 'Cemaden',
-            'emissor': 'Cemaden (alerta técnico às Defesas Civis)',
-            'titulo': f'{tipo} – risco {nivel_txt.lower()}' if nivel_txt else tipo,
-            'evento': tipo,
-            'severidade': f'Risco {nivel_txt.lower()}' if nivel_txt else 'Alerta',
-            'nivel': nivel,
-            'cor': cor,
-            'inicio': iso(inicio),
-            'fim': None,
-            'riscos': list(riscos),
-            'instrucoes': ['Siga as orientações da Defesa Civil do seu município (telefone 199).'],
-            'geocodes': [cod] if len(cod) >= 6 else [],
-            'estados': [uf] if uf in UFS else [],
-            'poligonos': [],
-            'areaTexto': f'{municipio} - {uf}' if municipio else '',
-            'link': 'https://painelalertas.cemaden.gov.br/',
-        })
-    return alertas
+# Cemaden: o painel (painelalertas.cemaden.gov.br/wsAlertas2) tem dados em JSON, mas o robots.txt
+# do site proíbe coleta automática (Disallow: /). Por isso não é lido. Os alertas do Cemaden chegam
+# às Defesas Civis e, quando viram aviso à população, entram pela IDAP.
 
 
 # Áreas marítimas da METAREA V (Marinha) e os estados do litoral de cada uma
@@ -377,13 +371,16 @@ def html_para_texto(h):
     return re.sub(r'[ \t\xa0]+', ' ', h)
 
 
-def dia_hora(ref, dia, hhmm):
-    """Converte 'DDHHMMZ' para data, usando o mês/ano da emissão."""
-    d = ref
-    if dia < ref.day - 15:  # virou o mês
-        d = (ref.replace(day=28) + timedelta(days=4)).replace(day=1)
+RE_RESUMO = re.compile(
+    r'AVISO\s+(\d+)\s*-\s*([^\n]+?)\s*\n\s*VALIDO DE\s+(\d{1,2})/(\w{3})\s+(\d{2}):(\d{2})\s+A\s+(\d{1,2})/(\w{3})\s+(\d{2}):(\d{2})\s+UTC'
+    r'(.*?)(?=\n[ \t]*\n|\s+AVISO\s+\d|\s+WARNING|$)', re.S)
+
+
+def data_marinha(dia, mes, hh, mm):
+    m = MESES.get(mes.upper()[:3], AGORA.month)
+    ano = AGORA.year + (1 if m == 1 and AGORA.month == 12 else -1 if m == 12 and AGORA.month == 1 else 0)
     try:
-        return d.replace(day=dia, hour=int(hhmm[:2]), minute=int(hhmm[2:]), second=0, microsecond=0)
+        return datetime(ano, m, int(dia), int(hh), int(mm), tzinfo=UTC)
     except ValueError:
         return None
 
@@ -393,51 +390,48 @@ def fonte_marinha():
     url = 'https://www.marinha.mil.br/chm/dados-do-smm-avisos-de-mau-tempo/avisos-de-mau-tempo'
     texto = html_para_texto(baixar(url, timeout=60).decode('utf-8', 'replace'))
     if DEBUG:
-        i = texto.find('AVISO')
-        print('  [debug] marinha texto:', repr(texto[max(0, i - 200): i + 2500]))
+        i = texto.find('AVISO NR')
+        print('  [debug] marinha texto completo:', repr(texto[max(0, i - 300): i + 1500]) if i >= 0 else 'sem "AVISO NR"')
     alertas, vistos = [], set()
-    marcas = list(re.finditer(r'AVISO\s+NR\s+(\d+)\s*/\s*(\d{4})', texto))
-    for i, m in enumerate(marcas):
-        numero, ano = m[1], m[2]
+    for m in RE_RESUMO.finditer(texto):
+        numero = m[1]
         if numero in vistos:
             continue
-        corpo = texto[m.end(): marcas[i + 1].start() if i + 1 < len(marcas) else m.end() + 3000]
-        corpo = corpo.split('WARNING')[0]
-        e = re.search(r'AVISO DE (.+?) EMITIDO\s+[ÀA]S\s+(\d{4})Z\s*-\s*\w+\s*-\s*(\d{1,2})/(\w{3})/(\d{4})', corpo)
-        if not e:
-            continue
         vistos.add(numero)
-        tipo = re.sub(r'\s+', ' ', e[1]).strip()
-        mes = MESES.get(e[4].upper()[:3], AGORA.month)
-        emitido = datetime(int(e[5]), mes, int(e[3]), int(e[2][:2]), int(e[2][2:]), tzinfo=UTC)
-        ini = re.search(r'A PARTIR DE\s+(\d{2})(\d{4})Z', corpo)
-        ate = re.search(r'V[ÁA]LIDO AT[ÉE]\s+(\d{2})(\d{4})Z', corpo)
-        inicio = dia_hora(emitido, int(ini[1]), ini[2]) if ini else emitido
-        fim = dia_hora(emitido, int(ate[1]), ate[2]) if ate else emitido + timedelta(hours=48)
+        tipo = re.sub(r'\s+', ' ', m[2]).strip()
+        inicio, fim = data_marinha(m[3], m[4], m[5], m[6]), data_marinha(m[7], m[8], m[9], m[10])
         if fim and fim < AGORA:
             continue
-        if ate:  # o que vem depois de "VÁLIDO ATÉ" já é o título da próxima área
-            corpo = corpo[:ate.end()]
-        areas_achadas = RE_AREA.findall(corpo) or RE_AREA.findall(texto[:m.start()])[-1:]
+        detalhe = re.sub(r'\s+', ' ', m[11]).strip()
+        # A área (Alfa, Bravo...) aparece no texto completo do aviso, quando a página o traz
+        areas_achadas = []
+        completo = re.search(rf'AVISO\s+NR\s+0*{numero}\s*/\s*\d{{4}}', texto)
+        if completo:
+            corpo = texto[completo.end(): completo.end() + 2500]
+            ate = re.search(r'V[ÁA]LIDO AT[ÉE]\s+\d{6}Z', corpo)
+            corpo = corpo[:ate.end()] if ate else corpo
+            areas_achadas = RE_AREA.findall(corpo) or RE_AREA.findall(texto[:completo.start()])[-1:]
+            detalhe_completo = re.sub(r'\s+', ' ', corpo).strip()
+            if len(detalhe_completo) > len(detalhe):
+                detalhe = detalhe_completo[:600]
         estados, regioes = [], []
         for a in areas_achadas:
             a = a.replace('OCEANICA', 'OCEÂNICA')
             desc, ufs = AREAS_MARINHA.get(a, ('', []))
             regioes.append(f'Área {a.title()}' + (f' ({desc})' if desc else ''))
             estados += [u for u in ufs if u not in estados]
-        for uf in re.findall(r'/([A-Z]{2})\b', corpo):
+        for uf in re.findall(r'[A-ZÀ-Ú]{3,}/([A-Z]{2})\b', detalhe):  # "ILHABELA/SP" (não "S/SE", que é direção)
             if uf in UFS and uf not in estados:
                 estados.append(uf)
         t = sem_acento(tipo)
-        nivel, cor = (3, VERMELHO) if re.search(r'tempestade|furacao|ciclone|violento', t) else \
-            (2, LARANJA) if 'muito' in t or 'alto' in t else (1, AMARELO)
-        detalhe = re.sub(r'\s+', ' ', corpo[e.end():]).strip()[:600]
+        nivel, cor = (3, VERMELHO) if re.search(r'tempestade|furacao|ciclone|violento|muito alto|alto/', t) else \
+            (2, LARANJA) if 'muito' in t or t.endswith('alto') else (1, AMARELO)
         alertas.append({
-            'id': f'marinha-{numero}-{ano}',
+            'id': f'marinha-{numero}',
             'fonteId': 'marinha',
             'fonte': 'Marinha',
             'emissor': 'Centro de Hidrografia da Marinha',
-            'titulo': f'Aviso de {tipo.lower()} (mar)',
+            'titulo': f'Aviso de {tipo.lower()} no mar',
             'evento': tipo.title(),
             'severidade': 'Aviso de mau tempo',
             'nivel': nivel,
@@ -454,6 +448,8 @@ def fonte_marinha():
             'maritimo': True,
             'link': url,
         })
+    if not alertas and 'AVISO' in texto and 'NÃO HÁ AVISOS' not in texto.upper():
+        raise RuntimeError('A página da Marinha mudou de formato: há avisos, mas nenhum foi reconhecido')
     return alertas
 
 
@@ -465,7 +461,6 @@ def fonte_inmet_bruto():
 
 FONTES = [
     ('defesa-civil', 'Defesa Civil (IDAP)', fonte_defesa_civil),
-    ('cemaden', 'Cemaden', fonte_cemaden),
     ('marinha', 'Marinha (CHM)', fonte_marinha),
 ]
 

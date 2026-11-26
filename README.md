@@ -16,13 +16,13 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 |---|---|
 | Previsão, mapas, qualidade do ar | Open-Meteo (CC BY 4.0, uso não comercial) |
 | Alertas (ao vivo no navegador) | INMET (`apiprevmet3.inmet.gov.br/avisos/ativos`) |
-| Alertas (pelo coletor automático) | Defesa Civil/IDAP (CAP), Cemaden (painel de alertas), Marinha/CHM (avisos de mau tempo) |
+| Alertas (pelo coletor automático) | Defesa Civil/IDAP (CAP) e Marinha/CHM (avisos de mau tempo) |
 | Municípios e contornos | IBGE (API de localidades e de malhas) |
 | Nome da cidade pela localização | BigDataCloud (reverse geocode client) |
 | Radar | RainViewer |
 | Mapa de fundo | OpenStreetMap / CARTO |
 
-Fontes de alertas sem dados abertos hoje: centros estaduais (Simepar, Epagri/Ciram, Funceme, APAC, Inea, CGE-SP, Alerta Rio), CPTEC/INPE, SGB/ANA (boletins em PDF) e institutos privados. O app mostra essa lista na aba Alertas.
+Fontes de alertas sem dados abertos hoje: Cemaden (o painel tem JSON, mas o robots.txt proíbe coleta automática), centros estaduais (Simepar, Epagri/Ciram, Funceme, APAC, Inea, CGE-SP, Alerta Rio), CPTEC/INPE, SGB/ANA (boletins em PDF) e institutos privados. O app mostra essa lista na aba Alertas.
 
 ## Coletor automático de alertas
 Algumas fontes não podem ser lidas direto pelo navegador. O arquivo `coletor/coletar.py` (Python, sem nada para instalar) busca essas fontes, respeita o `robots.txt` de cada site, junta tudo num formato único e grava `alertas.json`.
