@@ -1,0 +1,33 @@
+# Gera dados/cidades.json (nomes das cidades no mapa de alertas) e salva no próprio ramo.
+# Só precisa rodar de novo se o IBGE atualizar a população: Actions > Gerar lista de cidades > Run workflow.
+name: Gerar lista de cidades
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - 'coletor/gerar_cidades.py'
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Gerar dados/cidades.json
+        run: python3 coletor/gerar_cidades.py dados/cidades.json
+
+      - name: Salvar no ramo
+        run: |
+          git add dados/cidades.json
+          if git diff --cached --quiet; then echo 'Sem mudanças'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m 'Atualiza lista de cidades (IBGE)'
+          git push -q

@@ -1,5 +1,6 @@
 # Coleta os alertas das fontes sem acesso direto pelo navegador (Defesa Civil/IDAP,
-# Marinha) e publica o resultado no ramo "dados" (alertas.json e a cópia inmet.json).
+# Marinha) e os focos de incêndio do INPE, e publica no ramo "dados"
+# (alertas.json, focos.json e a cópia inmet.json).
 # O app lê: https://raw.githubusercontent.com/<dono>/<repo>/dados/alertas.json
 #
 # Limites do GitHub Actions:
@@ -35,6 +36,12 @@ jobs:
         with:
           sparse-checkout: coletor
 
+      - name: Pegar a coleta anterior de incêndios
+        # Os focos são somados aos poucos: só os arquivos novos do INPE são lidos a cada vez
+        run: |
+          mkdir -p anterior
+          git fetch -q --depth=1 origin dados && git show FETCH_HEAD:focos.json > anterior/focos.json || rm -f anterior/focos.json
+
       - name: Buscar alertas
         run: python3 coletor/coletar.py saida
         env:
@@ -65,7 +72,8 @@ jobs:
           git init -q -b dados
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add alertas.json inmet.json 2>/dev/null || git add alertas.json
+          git add alertas.json
+          for f in inmet.json focos.json; do [ -f "$f" ] && git add "$f"; done
           git commit -q -m "Alertas de $(date -u +%Y-%m-%dT%H:%MZ)"
           # O ramo "dados" guarda só a última coleta (sem histórico acumulado)
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dados
