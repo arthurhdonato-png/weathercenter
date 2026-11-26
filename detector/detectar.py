@@ -140,7 +140,8 @@ def rodar_agora(saida, anterior):
     if rad is not None:
         try:
             import radar
-            al = radar.alertas_radar(rad, tempestades, ambiente, mun)
+            al, celulas = radar.alertas_radar(rad, tempestades, ambiente, mun, estado.get('celulasRadar', []))
+            estado['celulasRadar'] = celulas
             alertas += al
             fontes['radar']['quantidade'] = len(al)
         except Exception as e:

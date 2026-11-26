@@ -481,3 +481,20 @@ body[data-aba="mapas"], body[data-aba="alertas"] { overflow: hidden; }
 }
 
 .q-auto { background: transparent !important; border: 2px dashed var(--texto); box-sizing: border-box; }
+/* ======================= Avisos no celular (notificações) ======================= */
+.notif-cidade { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie); font-size: .88rem; }
+.notif-cidade > span:not(.notif-sino) { flex: 1 1 220px; }
+.notif-sino { font-size: 1.05rem; }
+.notif-link { font-weight: 600; color: var(--acento); text-decoration: none; }
+.notif-msg { flex-basis: 100%; margin: 4px 0 0; font-size: .84rem; color: var(--sutil); }
+.notif-painel p { margin: 6px 0 10px; }
+.notif-cidades { list-style: none; margin: 6px 0 10px; padding: 0; }
+.notif-cidades li { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--borda); padding: 2px 0; }
+.notif-cidades li:last-child { border-bottom: 0; }
+.notif-nivel { display: grid; gap: 4px; margin: 12px 0 8px; font-size: .84rem; color: var(--sutil); }
+.notif-nivel select { font: inherit; color: var(--texto); background: var(--superficie); border: 1px solid var(--borda-forte); border-radius: var(--raio-p); padding: 7px 10px; }
+.notif-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.notif-passos { margin: 4px 0 8px; padding-left: 20px; }
+.notif-passos li { margin: 3px 0; }
+.notif-codigo { letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+.btn-sec:disabled, .btn-icone:disabled { opacity: .5; cursor: default; }

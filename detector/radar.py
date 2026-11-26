@@ -165,14 +165,15 @@ def carregar(estado=None):
     return Radar(g1, g0, t1, t0, fixo, pronto=n >= 6), novo
 
 
-def alertas_radar(radar, tempestades_raios, ambiente, municipios):
+def alertas_radar(radar, tempestades_raios, ambiente, municipios, anteriores=None):
     """Núcleos de chuva muito forte (50 dBZ ou mais) que não estão junto de tempestades com raios."""
     if radar is None or not radar.pronto:
-        return []
+        return [], []
     forte = (np.nan_to_num(radar.dbz, nan=0) >= 50) & ~radar.fixo
     forte_ant = np.nan_to_num(radar.ant, nan=0) >= 50
     rot, n = ndimage.label(ndimage.binary_dilation(forte, iterations=1), structure=np.ones((3, 3)))
     saida = []
+    celulas = []
     objs = ndimage.find_objects(rot)
     perto_raios = [(t['lat'], t['lon']) for t in tempestades_raios if t.get('nivel', 0) >= 1]
     for r in range(1, n + 1):
@@ -211,6 +212,11 @@ def alertas_radar(radar, tempestades_raios, ambiente, municipios):
             ve, vn, vel = ve * 110 / vel, vn * 110 / vel, 110.0
         dbz = float(np.nanmax(radar.dbz[area]))
         nivel = 2 if (dbz >= 58 and cel >= 8) else 1
+        # mesmo núcleo da execução anterior = mesmo id (para não notificar de novo)
+        ant = raios._casar(anteriores, lat_c, lon_c, radar.t)
+        ident = ant['id'] if ant else f'c{radar.t:%d%H%M}{int(abs(lat_c) * 10) % 1000:03d}{int(abs(lon_c) * 10) % 1000:03d}'
+        celulas.append({'id': ident, 'lat': round(lat_c, 3), 'lon': round(lon_c, 3), 've': round(ve, 1), 'vn': round(vn, 1),
+                        't': int(radar.t.timestamp())})
         mg = raios.margem(ve, vn, lat_c)
         y0, y1 = max(0, sl[0].start - mg), min(len(LATS), sl[0].stop + mg)
         x0, x1 = max(0, sl[1].start - mg), min(len(LONS), sl[1].stop + mg)
@@ -231,7 +237,7 @@ def alertas_radar(radar, tempestades_raios, ambiente, municipios):
         riscos.append(f'Detectado por radar: {dbz:.0f} dBZ às {hora_local(radar.t)}, sem raios associados.')
         alvo = ', '.join(municipios.nome[k] for k in sorted(idx, key=lambda k: (chegada[k] > 0, -municipios.pop[k]))[:2])
         saida.append(alerta(
-            ident=f'radar-{int(lat_c * -100)}{int(lon_c * -100)}-{radar.t:%H%M}', tipo='chuva', metodo='radar', nivel=nivel,
+            ident=f'radar-{ident}', tipo='chuva', metodo='radar', nivel=nivel,
             titulo=f'Chuva muito forte se aproximando – {alvo}', evento='Chuva muito forte (radar)',
             inicio=radar.t, fim=radar.t + timedelta(minutes=raios.HORIZONTE), riscos=riscos, instrucoes=INSTRUCOES['chuva'],
             municipios=municipios, idx_mun=idx, poligonos=aneis, atualizado=radar.t,
@@ -239,4 +245,4 @@ def alertas_radar(radar, tempestades_raios, ambiente, municipios):
             detalhes={'centro': [round(lat_c, 3), round(lon_c, 3)], 'velocidadeKmh': round(vel), 'rumoGraus': round(float(rumo)),
                       'dbz': round(dbz), 'chegadaMin': {municipios.ibge[k]: chegada[k] for k in idx}},
         ))
-    return saida
+    return saida, celulas

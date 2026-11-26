@@ -384,6 +384,7 @@ def areas_para_alertas(niveis, indices, tempos, municipios, agora, modelos_usado
     desenho de um nível inclui as áreas dos níveis acima (como os avisos do INMET).
     """
     alertas = []
+    usados_ids = {}
     estrutura = np.ones((3, 3, 3), bool)
     futuro = np.array([t + timedelta(hours=1.5) >= agora for t in tempos])
     conf = 'alta (GFS e ECMWF concordam)' if len(modelos_usados) > 1 else f'média (só {modelos_usados[0].upper()})'
@@ -442,7 +443,14 @@ def areas_para_alertas(niveis, indices, tempos, municipios, agora, modelos_usado
                 riscos.append(f'Período: {_texto_janela(inicio, fim)}.')
                 riscos.append(f'Confiança: {conf}.')
                 area_txt, _ = municipios.descrever(idx, 3)
-                ident = f"prev-{tipo}-{nivel}-{inicio:%Y%m%d%H}-{int(LATS[np.nonzero(proj)[0].mean().astype(int)] * 10)}{int(LONS[np.nonzero(proj)[1].mean().astype(int)] * 10)}"
+                # Identificador estável entre rodadas (as notificações usam o id para não repetir):
+                # tipo, nível, período de 12 h e estado com mais cidades atingidas
+                ufs = [municipios.uf[k] for k in idx]
+                uf_p = max(set(ufs), key=ufs.count)
+                p_ini = tempos[ts[0]]
+                base_id = f"prev-{tipo}-{nivel}-{(p_ini - timedelta(hours=12)):%Y%m%d}{'n' if ((p_ini.hour - 12) % 24) >= 12 else 'd'}-{uf_p}"
+                usados_ids[base_id] = usados_ids.get(base_id, 0) + 1
+                ident = base_id + (f'-{usados_ids[base_id]}' if usados_ids[base_id] > 1 else '')
                 alertas.append(alerta(
                     ident=ident, tipo=tipo, metodo='previsao', nivel=nivel,
                     titulo=f'{TITULOS[tipo]} – {area_txt.split(" (")[0]} ({_periodo(inicio, agora)})',

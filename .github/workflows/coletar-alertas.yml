@@ -15,11 +15,17 @@ name: Coletar alertas
 on:
   schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      teste_codigo:
+        description: 'Código do aparelho (aparece no app, em Alertas > Avisos no celular) para receber uma notificação de teste'
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'coletor/**'
       - 'detector/**'
+      - 'notificador/**'
       - '.github/workflows/coletar-alertas.yml'
 
 permissions:
@@ -42,6 +48,7 @@ jobs:
         with:
           sparse-checkout: |
             coletor
+            notificador
             detector
             dados
 
@@ -107,6 +114,20 @@ jobs:
               print(f"- **{a['severidade']}** ({a['metodo']}) {a['titulo']}")
           EOF
 
+      - name: Enviar notificações dos alertas novos
+        # Falha aqui não impede a publicação dos alertas
+        continue-on-error: true
+        run: |
+          node notificador/testes/webpush.test.mjs > /dev/null
+          node notificador/enviar.mjs saida
+        env:
+          SIMULAR: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          TESTE_CODIGO: ${{ inputs.teste_codigo }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+
       - name: Publicar no ramo "dados"
         if: github.event_name != 'pull_request'
         env:
@@ -117,7 +138,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add alertas.json
-          for f in inmet.json focos.json weathercenter.json estado-detector.json.gz radar-persistencia.npz; do [ -f "$f" ] && git add "$f"; done
+          for f in inmet.json focos.json push.json weathercenter.json estado-detector.json.gz radar-persistencia.npz; do [ -f "$f" ] && git add "$f"; done
           git commit -q -m "Alertas de $(date -u +%Y-%m-%dT%H:%MZ)"
           # O ramo "dados" guarda só a última coleta (sem histórico acumulado)
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dados

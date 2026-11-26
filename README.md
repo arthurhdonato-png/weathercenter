@@ -46,6 +46,8 @@ Código em `detector/` (Python com numpy, scipy, eccodes, netCDF4 e pillow, inst
 - **A cada ~5 min**, junto com o coletor: raios, radar e aeroportos (`python3 detector/detectar.py agora saida anterior`). Os alertas entram no mesmo `alertas.json` com `fonteId: "weathercenter"` e também em `weathercenter.json` (com as tempestades acompanhadas). Para não depender do agendamento do GitHub, que atrasa ou pula execuções, cada coleta dispara a seguinte; para desligar, crie a variável `ENCADEAR` com valor `nao` em Settings > Secrets and variables > Actions > Variables.
 - **A cada 30 min** (workflow **Prever eventos**): verifica se saiu rodada nova do GFS ou do ECMWF e recalcula a previsão de 48 h, publicada no ramo `dados-modelos`.
 - Testes com casos reais: `detector/testes/` (resultados em `detector/testes/RESULTADOS.md`).
+## Avisos no celular
+Notificações push dos alertas novos para as cidades que cada pessoa escolher, mesmo com o app fechado. Enviadas pelo mesmo GitHub Actions, com as inscrições guardadas no Supabase (grátis). Configuração e limitações: [`notificador/LEIAME.md`](notificador/LEIAME.md).
 
 ## Estrutura
 Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL).
