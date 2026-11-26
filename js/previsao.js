@@ -263,20 +263,23 @@ export function render7dias(prev) {
 const fmtData = (d) => (d ? d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
 
 export function cartaoAlerta(a) {
+  const emissor = a.emissor && a.emissor !== a.fonte ? ` · ${esc(a.emissor)}` : '';
   return `<div class="alerta" style="--cor:${esc(a.cor)}" role="alert">
-    <div class="alerta-topo"><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span><span class="fonte">${esc(a.fonte)}</span></div>
+    <div class="alerta-topo"><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span><span class="fonte">${esc(a.fonte)}${emissor}</span></div>
     <h3>${esc(a.titulo)}</h3>
     <p class="pequeno">${a.inicio ? `De ${fmtData(a.inicio)}` : ''}${a.fim ? ` até ${fmtData(a.fim)}` : ''}</p>
+    ${a.regiao ? `<p class="pequeno">${esc(a.regiao)}</p>` : ''}
     ${a.riscos.length || a.instrucoes.length ? `<details><summary>Riscos e o que fazer</summary>
       ${a.riscos.length ? `<strong>Riscos</strong><ul>${a.riscos.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
       ${a.instrucoes.length ? `<strong>Instruções</strong><ul>${a.instrucoes.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
     </details>` : ''}
+    ${a.link && /^https:\/\//.test(a.link) ? `<p class="pequeno"><a href="${esc(a.link)}" target="_blank" rel="noopener">Ver na fonte oficial</a></p>` : ''}
   </div>`;
 }
 
 export function renderAlertasCidade(resultado, cidade, afeta) {
   const el = $('alertas-cidade');
-  if (!resultado || resultado.status.inmet === 'erro') {
+  if (!resultado || !Object.values(resultado.status).includes('ok')) {
     el.innerHTML = `<div class="aviso-neutro">⚠️ Não foi possível consultar os alertas agora. Veja em <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">alertas2.inmet.gov.br</a>.</div>`;
     return;
   }

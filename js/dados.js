@@ -10,6 +10,8 @@ export const API = {
   reverso: 'https://api.bigdatacloud.net/data/reverse-geocode-client',
   inmet: 'https://apiprevmet3.inmet.gov.br/avisos/ativos',
   inmetSite: 'https://alertas2.inmet.gov.br/',
+  // Arquivo gerado a cada ~5 min pelo coletor (GitHub Actions, ramo "dados")
+  coletor: 'https://raw.githubusercontent.com/arthurhdonato-png/weathercenter/dados/alertas.json',
   radar: 'https://api.rainviewer.com/public/weather-maps.json',
 };
 
@@ -175,15 +177,20 @@ export const municipiosDoEstado = (codigoUF) => malha(`estados/${codigoUF}`, 'in
 
 /* ======================= Alertas ======================= */
 // Cada fonte devolve uma lista no formato comum:
-// { id, fonte, fonteCor, titulo, severidade, cor, inicio, fim, riscos[], instrucoes[], geocodes[], poligonos[[ [lat,lon], ... ]], areaTexto }
+// { id, fonte, emissor?, titulo, severidade, nivel, cor, inicio, fim, riscos[], instrucoes[], geocodes[], estados[],
+//   poligonos[[ [lat,lon], ... ]], areaTexto, regiao?, maritimo?, link }
+// O mesmo formato é gerado pelo coletor (coletor/coletar.py).
 
+// ativa: 'direto' (o navegador lê a fonte), 'coletor' (lida pelo coletor automático) ou false (sem dados abertos)
 export const FONTES_ALERTA = [
-  { id: 'inmet', nome: 'INMET', descricao: 'Instituto Nacional de Meteorologia', site: API.inmetSite, cor: '#0b5394', ativa: true },
-  { id: 'defesa-civil', nome: 'Defesa Civil', descricao: 'Defesa Civil Alerta (nacional e estaduais)', site: 'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil', ativa: false, motivo: 'Os alertas são enviados por SMS, celular e WhatsApp, mas não há uma API pública para sites lerem.' },
-  { id: 'cemaden', nome: 'Cemaden', descricao: 'Centro Nacional de Monitoramento e Alertas de Desastres Naturais', site: 'https://www.gov.br/cemaden/', ativa: false, motivo: 'Não publica os alertas em formato aberto que um site possa ler.' },
+  { id: 'inmet', nome: 'INMET', descricao: 'Instituto Nacional de Meteorologia: avisos de chuva, vento, calor, frio, baixa umidade e outros', site: API.inmetSite, ativa: 'direto' },
+  { id: 'defesa-civil', nome: 'Defesa Civil', descricao: 'Alertas da Defesa Civil nacional, estaduais e municipais (os mesmos do SMS 40199 e do Defesa Civil Alerta), pela IDAP em formato CAP', site: 'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1', ativa: 'coletor' },
+  { id: 'cemaden', nome: 'Cemaden', descricao: 'Alertas de risco de inundação e deslizamento enviados aos municípios monitorados', site: 'https://painelalertas.cemaden.gov.br/', ativa: 'coletor' },
+  { id: 'marinha', nome: 'Marinha (CHM)', descricao: 'Avisos de mau tempo para o mar e o litoral: ressaca, vento forte e mar grosso', site: 'https://www.marinha.mil.br/chm/dados-do-smm-avisos-de-mau-tempo/avisos-de-mau-tempo', ativa: 'coletor' },
+  { id: 'estaduais', nome: 'Centros estaduais', descricao: 'Simepar, Epagri/Ciram, Funceme, APAC, Inea, CGE-SP, Alerta Rio e outros', site: '', ativa: false, motivo: 'Não têm feed aberto. Quando a Defesa Civil do estado ou da cidade repassa o alerta, ele aparece aqui pela Defesa Civil.' },
   { id: 'cptec', nome: 'CPTEC/INPE', descricao: 'Centro de Previsão de Tempo e Estudos Climáticos', site: 'https://www.cptec.inpe.br/', ativa: false, motivo: 'Não oferece uma lista aberta de avisos ativos.' },
+  { id: 'hidro', nome: 'SGB e ANA', descricao: 'Sistemas de alerta de cheias dos rios', site: 'https://www.sgb.gov.br/sace/', ativa: false, motivo: 'Publicam boletins em PDF por bacia, sem formato de alerta que o app possa ler com segurança.' },
   { id: 'privados', nome: 'Institutos privados', descricao: 'MetSul, Climatempo e outros', site: '', ativa: false, motivo: 'Exigem contrato ou chave paga para uso dos dados.' },
-  { id: 'wmo', nome: 'OMM (WMO)', descricao: 'Centro de Informação de Tempo Severo da OMM', site: 'https://severeweather.wmo.int/', ativa: false, motivo: 'Para o Brasil, repassa os mesmos avisos do INMET.' },
 ];
 
 const lista = (v) => (Array.isArray(v) ? v : v ? String(v).split(/\n|;(?=\s*[A-ZÁÉÍÓÚ])/) : [])
@@ -270,19 +277,64 @@ async function alertasINMET() {
   return brutos.map(normalizarINMET).filter((a) => (vistos.has(a.id) ? false : vistos.add(a.id)));
 }
 
-// Busca todas as fontes ativas. Devolve { alertas, status: {fonteId: 'ok'|'erro'} }
+// Arquivo do coletor automático (Defesa Civil, Cemaden, Marinha e cópia do INMET)
+async function dadosColetor() {
+  // O endereço muda a cada 2 min para não pegar uma cópia velha guardada no caminho
+  const url = `${API.coletor}?v=${Math.floor(Date.now() / 120000)}`;
+  return comCache('wc:coletor', 2 * 60 * 1000, () => getJSON(url, 25000));
+}
+
+const paraData = (v) => { const d = v ? new Date(v) : null; return d && !Number.isNaN(+d) ? d : null; };
+
+function normalizarColetor(a) {
+  return {
+    ...a,
+    inicio: paraData(a.inicio),
+    fim: paraData(a.fim),
+    riscos: a.riscos || [],
+    instrucoes: a.instrucoes || [],
+    geocodes: (a.geocodes || []).map(String),
+    estados: a.estados || [],
+    poligonos: a.poligonos || [],
+    areaTexto: a.areaTexto || '',
+  };
+}
+
+// Busca todas as fontes. Devolve { alertas, status: {fonteId: 'ok'|'erro'}, coletadoEm }
 export async function todosAlertas() {
   const status = {};
   const alertas = [];
-  const fontes = [['inmet', alertasINMET]];
-  await Promise.all(fontes.map(async ([id, fn]) => {
-    try { alertas.push(...await fn()); status[id] = 'ok'; } catch (e) { console.warn(id, e); status[id] = 'erro'; }
-  }));
+  const [inmet, coletor] = await Promise.allSettled([alertasINMET(), dadosColetor()]);
+  if (inmet.status === 'fulfilled') { alertas.push(...inmet.value); status.inmet = 'ok'; } else console.warn('inmet', inmet.reason);
+  let coletadoEm = null;
+  if (coletor.status === 'fulfilled' && coletor.value) {
+    const d = coletor.value;
+    coletadoEm = paraData(d.gerado_em);
+    // Se o arquivo ficou muito velho (coletor parado), não mostra alertas antigos como se fossem atuais
+    const velho = !coletadoEm || Date.now() - coletadoEm > 3 * 60 * 60 * 1000;
+    for (const [id, f] of Object.entries(d.fontes || {})) if (id !== 'inmet') status[id] = f.ok && !velho ? 'ok' : 'erro';
+    if (!velho) {
+      const agora = Date.now();
+      alertas.push(...(d.alertas || []).map(normalizarColetor).filter((a) => !a.fim || +a.fim > agora));
+      // INMET fora do ar para o navegador: usa a cópia feita pelo coletor
+      if (!status.inmet && d.inmet_bruto) {
+        const brutos = Array.isArray(d.inmet_bruto) ? d.inmet_bruto : [...(d.inmet_bruto.hoje || []), ...(d.inmet_bruto.futuro || [])];
+        const vistos = new Set();
+        alertas.push(...brutos.map(normalizarINMET).filter((a) => (vistos.has(a.id) ? false : vistos.add(a.id))));
+        status.inmet = 'ok';
+      }
+    }
+  } else {
+    console.warn('coletor', coletor.reason);
+  }
+  for (const f of FONTES_ALERTA) if (f.ativa && !status[f.id]) status[f.id] = 'erro';
   alertas.sort((a, b) => b.nivel - a.nivel);
-  return { alertas, status };
+  return { alertas, status, coletadoEm };
 }
 
+
 export function alertaAfetaCidade(a, cidade) {
+  if (a.maritimo) return false;
   if (cidade.id && a.geocodes.length) {
     const id7 = String(cidade.id), id6 = id7.slice(0, 6);
     return a.geocodes.some((c) => c === id7 || c === id6);
