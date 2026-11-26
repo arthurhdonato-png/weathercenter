@@ -60,9 +60,23 @@ function desenhar() {
   // Menos graves primeiro, para os mais graves ficarem por cima
   [...visiveis].sort((x, y) => x.alerta.nivel - y.alerta.nivel).forEach(({ alerta, aneis }) => {
     if (!aneis.length) return;
+    // Alertas automáticos do WeatherCenter: contorno tracejado e preenchimento mais leve
+    const auto = alerta.oficial === false;
     L.polygon(aneis.map((anel) => anel.map(([lon, lat]) => [lat, lon])), {
-      color: alerta.cor, weight: 1, opacity: 0.9, fillColor: alerta.cor, fillOpacity: 0.45, interactive: false, pane: 'areasAlerta',
+      color: alerta.cor, weight: auto ? 2 : 1, opacity: 0.95, dashArray: auto ? '6 4' : null,
+      fillColor: alerta.cor, fillOpacity: auto ? 0.28 : 0.45, interactive: false, pane: 'areasAlerta',
     }).addTo(estado.grupo);
+    // Tempestade acompanhada: seta do deslocamento (de onde está para onde vai em 60 min)
+    const d = alerta.detalhes;
+    if (auto && d?.centro && d.velocidadeKmh >= 8) {
+      const [la, lo] = d.centro;
+      const rad = (d.rumoGraus * Math.PI) / 180;
+      const km = d.velocidadeKmh;
+      const fim = [la + (km * Math.cos(rad)) / 111.2, lo + (km * Math.sin(rad)) / (111.2 * Math.cos((la * Math.PI) / 180))];
+      L.polyline([[la, lo], fim], { color: '#111', weight: 2, opacity: 0.8, interactive: false, pane: 'linhas' }).addTo(estado.grupo);
+      L.circleMarker(fim, { radius: 3, color: '#111', fillColor: '#111', fillOpacity: 1, interactive: false, pane: 'linhas' }).addTo(estado.grupo);
+      L.circleMarker([la, lo], { radius: 5, color: '#111', weight: 2, fillColor: alerta.cor, fillOpacity: 1, interactive: false, pane: 'linhas' }).addTo(estado.grupo);
+    }
   });
   renderLista(visiveis.map((v) => v.alerta));
 }

@@ -51,10 +51,14 @@ function mensagem(a, cidades, agravado) {
   const nomes = cidades.map((c) => c.nome).filter(Boolean);
   const onde = nomes.length > 2 ? `${nomes.slice(0, 2).join(', ')} e mais ${nomes.length - 2}` : nomes.join(' e ');
   const risco = (a.riscos || []).map((r) => String(r).replace(/^Defesa Civil:\s*/i, '').trim()).find((r) => r.length > 10) || '';
+  // Alertas automáticos do WeatherCenter com trajetória: horário estimado de chegada na cidade
+  const chegada = a.detalhes?.chegadaMin;
+  const min = chegada ? cidades.map((c) => chegada[String(c.id)]).find((v) => v != null) : null;
+  const quando = min == null ? '' : min === 0 ? 'chegando agora' : `chegada em ~${min} min`;
   const linhas = [
-    [onde, a.severidade, a.fim ? `até ${fmtHora(a.fim)}` : ''].filter(Boolean).join(' · '),
+    [onde, a.severidade, quando || (a.fim ? `até ${fmtHora(a.fim)}` : '')].filter(Boolean).join(' · '),
     risco && corta(risco, 180),
-    `Fonte: ${a.fonte || 'WeatherCenter'}`,
+    a.oficial === false ? 'Fonte: WeatherCenter (automático, não oficial)' : `Fonte: ${a.fonte || 'WeatherCenter'}`,
   ].filter(Boolean);
   const titulo = `${SINAL[a.nivel] || '⚠️'} ${agravado ? 'Alerta agravado: ' : ''}${a.titulo || a.evento || 'Alerta'}`;
   const cidade = cidades.find((c) => c.id);

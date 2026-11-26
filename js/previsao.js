@@ -416,7 +416,8 @@ const fmtData = (d) => (d ? d.toLocaleString('pt-BR', { weekday: 'short', day: '
 
 export function cartaoAlerta(a) {
   const emissor = a.emissor && a.emissor !== a.fonte ? ` · ${esc(a.emissor)}` : '';
-  return `<div class="alerta" style="--cor:${esc(a.cor)}" role="alert">
+  const auto = a.oficial === false;
+  return `<div class="alerta${auto ? ' alerta-auto' : ''}" style="--cor:${esc(a.cor)}" role="alert">
     <div class="alerta-topo"><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span><span class="fonte">${esc(a.fonte)}${emissor}</span></div>
     <h3>${esc(a.titulo)}</h3>
     <p class="pequeno">${a.inicio ? `De ${fmtData(a.inicio)}` : ''}${a.fim ? ` até ${fmtData(a.fim)}` : ''}</p>
@@ -425,7 +426,8 @@ export function cartaoAlerta(a) {
       ${a.riscos.length ? `<strong>Riscos</strong><ul>${a.riscos.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
       ${a.instrucoes.length ? `<strong>Instruções</strong><ul>${a.instrucoes.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
     </details>` : ''}
-    ${a.link && /^https:\/\//.test(a.link) ? `<p class="pequeno"><a href="${esc(a.link)}" target="_blank" rel="noopener">Ver na fonte oficial</a></p>` : ''}
+    ${auto ? '<p class="aviso-auto">Alerta automático do WeatherCenter, não oficial. Siga sempre a Defesa Civil (199) e o INMET.</p>' : ''}
+    ${a.link && /^https:\/\//.test(a.link) ? `<p class="pequeno"><a href="${esc(a.link)}" target="_blank" rel="noopener">${auto ? 'Como o WeatherCenter detecta' : 'Ver na fonte oficial'}</a></p>` : ''}
   </div>`;
 }
 
@@ -435,10 +437,11 @@ function renderFaixaAlertas(daCidade, noEstado, cidade) {
   if (!daCidade.length && !noEstado.length) { el.hidden = true; el.innerHTML = ''; return; }
   const principal = daCidade[0] || noEstado[0];
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+  const oficiais = daCidade.filter((a) => a.oficial !== false).length;
   const titulo = daCidade.length
-    ? `${plural(daCidade.length, 'alerta oficial ativo', 'alertas oficiais ativos')} para ${esc(cidade.nome)}`
+    ? `${plural(daCidade.length, 'alerta ativo', 'alertas ativos')} para ${esc(cidade.nome)}${oficiais ? '' : ' (automático do WeatherCenter)'}`
     : `Nenhum alerta para ${esc(cidade.nome)}, mas há ${plural(noEstado.length, 'alerta', 'alertas')} em ${esc(cidade.uf)}`;
-  const itens = (daCidade.length ? daCidade : noEstado).slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}</span></li>`).join('');
+  const itens = (daCidade.length ? daCidade : noEstado).slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
   const extra = daCidade.length && noEstado.length ? ` · mais ${plural(noEstado.length, 'alerta', 'alertas')} em ${esc(cidade.uf)}` : '';
   el.style.setProperty('--cor', principal.cor);
   el.classList.toggle('so-estado', !daCidade.length);
@@ -461,6 +464,6 @@ export function renderAlertasCidade(resultado, cidade, afeta) {
   renderFaixaAlertas(daCidade, noEstado, cidade);
   el.innerHTML = daCidade.length
     ? daCidade.map(cartaoAlerta).join('')
-    : `<div class="aviso-neutro ok">Nenhum alerta oficial ativo para ${esc(cidade.nome)}.</div>`;
+    : `<div class="aviso-neutro ok">Nenhum alerta ativo para ${esc(cidade.nome)}.</div>`;
   return daCidade;
 }

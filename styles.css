@@ -211,6 +211,8 @@ body.carregando .painel { opacity: .6; transition: opacity .2s; }
 .selo { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; color: #1a1a1a; }
 .fonte { font-size: .74rem; font-weight: 600; color: var(--sutil); }
 .alerta h3 { font-size: .95rem; margin-bottom: 2px; }
+.alerta-auto { border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; }
+.aviso-auto { font-size: .78rem; margin-top: 6px !important; padding: 6px 8px; border-radius: 6px; background: var(--fundo); color: var(--sutil); }
 .alerta p { margin: 0; color: var(--sutil); }
 .alerta details { margin-top: 6px; font-size: .88rem; }
 .alerta summary { cursor: pointer; color: var(--texto); font-weight: 600; }
@@ -478,6 +480,7 @@ body[data-aba="mapas"], body[data-aba="alertas"] { overflow: hidden; }
   * { transition: none !important; }
 }
 
+.q-auto { background: transparent !important; border: 2px dashed var(--texto); box-sizing: border-box; }
 /* ======================= Avisos no celular (notificações) ======================= */
 .notif-cidade { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie); font-size: .88rem; }
 .notif-cidade > span:not(.notif-sino) { flex: 1 1 220px; }
