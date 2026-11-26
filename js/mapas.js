@@ -243,17 +243,19 @@ async function alternarRadar(ligar) {
   }
 }
 
-export function basemap(mapa) {
+// rotulos: false = sem os nomes do mapa de fundo (o mapa de alertas escreve os próprios nomes de cidades)
+export function basemap(mapa, { rotulos = true } = {}) {
   const escuro = matchMedia('(prefers-color-scheme: dark)').matches;
   const estilo = escuro ? 'dark' : 'light';
   L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}_nolabels/{z}/{x}/{y}{r}.png`, {
-    subdomains: 'abcd', maxZoom: 12,
+    subdomains: 'abcd', maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
   }).addTo(mapa);
+  if (!rotulos) return;
   mapa.createPane('rotulos');
   mapa.getPane('rotulos').style.zIndex = 650;
   mapa.getPane('rotulos').style.pointerEvents = 'none';
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}_only_labels/{z}/{x}/{y}{r}.png`, { subdomains: 'abcd', maxZoom: 12, pane: 'rotulos' }).addTo(mapa);
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${estilo}_only_labels/{z}/{x}/{y}{r}.png`, { subdomains: 'abcd', maxZoom: 18, pane: 'rotulos' }).addTo(mapa);
 }
 
 export async function linhasEstados(mapa) {

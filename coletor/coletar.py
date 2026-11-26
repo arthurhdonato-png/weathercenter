@@ -9,8 +9,10 @@ navegador, junta tudo num formato único (parecido com o CAP) e grava
 Usa só a biblioteca padrão do Python 3 (nada para instalar).
 Uso: python3 coletor/coletar.py [pasta_de_saida]
 """
+import csv
 import gzip
 import html
+import io
 import json
 import os
 import re
@@ -463,6 +465,99 @@ def fonte_inmet_bruto():
     return dados
 
 
+# ---------------------------------------------------------------- incêndios
+INPE_10MIN = 'https://dataserver-coids.inpe.br/queimadas/queimadas/focos/csv/10min/'
+CELULA = 0.02  # graus (~2 km): focos próximos viram uma só área no mapa
+
+
+def _coluna(cab, *nomes):
+    for n in nomes:
+        for c in cab:
+            if c.strip().lower() == n:
+                return c
+    return None
+
+
+def fonte_focos(anterior_caminho):
+    """Focos de incêndio por satélite do INPE (Programa Queimadas), últimas 24 horas.
+
+    O INPE publica um arquivo CSV a cada 10 minutos. Para não baixar tudo de novo a cada
+    execução, o coletor guarda as áreas já somadas em focos.json e só lê os arquivos novos.
+    Devolve o conteúdo de focos.json.
+    """
+    anterior = {}
+    try:
+        with open(anterior_caminho, encoding='utf-8') as f:
+            anterior = json.load(f)
+    except Exception:
+        pass
+    limite = AGORA - timedelta(hours=24)
+    lim_min = int(limite.timestamp() // 60)
+    celulas = {}
+    for lat, lon, n, ult in anterior.get('celulas', []):
+        if ult >= lim_min:
+            celulas[(round(lat / CELULA), round(lon / CELULA))] = [ult, n]
+    processados = set(anterior.get('arquivos', []))
+    indice = baixar(INPE_10MIN, timeout=60).decode('utf-8', 'replace')
+    nomes = sorted(set(re.findall(r'focos_10min_\d{8}_\d{4}\.csv', indice)))
+    if not nomes:
+        if DEBUG:
+            print('  [debug] índice do INPE:', repr(indice[:1500]))
+        raise RuntimeError('Nenhum arquivo de focos encontrado no índice do INPE')
+
+    def quando(nome):
+        d, h = re.findall(r'(\d{8})_(\d{4})', nome)[0]
+        return datetime.strptime(d + h, '%Y%m%d%H%M').replace(tzinfo=UTC)
+
+    recentes = [n for n in nomes if quando(n) >= limite]
+    novos = [n for n in recentes if n not in processados][-160:]
+    lidos, falhas = 0, 0
+    for nome in novos:
+        try:
+            texto = baixar(INPE_10MIN + nome, timeout=30, tentativas=2).decode('utf-8', 'replace')
+        except Exception as e:
+            falhas += 1
+            print(f'  aviso: {nome}: {e}')
+            continue
+        leitor = csv.DictReader(io.StringIO(texto))
+        cab = leitor.fieldnames or []
+        c_lat, c_lon = _coluna(cab, 'lat', 'latitude'), _coluna(cab, 'lon', 'longitude')
+        c_data = _coluna(cab, 'data_hora_gmt', 'datahora', 'data_hora', 'data')
+        c_pais = _coluna(cab, 'pais', 'país')
+        if DEBUG and lidos == 0:
+            print(f'  [debug] {nome} colunas: {cab}')
+        if not c_lat or not c_lon:
+            continue
+        for r in leitor:
+            if c_pais and r.get(c_pais) and sem_acento(r[c_pais]) not in ('brasil', 'brazil'):
+                continue
+            try:
+                lat, lon = float(r[c_lat]), float(r[c_lon])
+            except (TypeError, ValueError):
+                continue
+            d = data_iso((r.get(c_data) or '').replace('/', '-').replace(' ', 'T') + ('' if 'Z' in (r.get(c_data) or '') else 'Z')) if c_data else None
+            minuto = int((d or quando(nome)).timestamp() // 60)
+            if minuto < lim_min:
+                continue
+            chave = (round(lat / CELULA), round(lon / CELULA))
+            c = celulas.setdefault(chave, [minuto, 0])
+            c[0] = max(c[0], minuto)
+            c[1] += 1
+        processados.add(nome)
+        lidos += 1
+    print(f'  INPE: {len(novos)} arquivo(s) novo(s), {lidos} lido(s), {falhas} falha(s), {len(celulas)} área(s) com fogo')
+    return {
+        'versao': 1,
+        'gerado_em': iso(AGORA),
+        'fonte': 'INPE - Programa Queimadas (focos de calor por satélite)',
+        'celula_graus': CELULA,
+        'arquivos': sorted(n for n in processados if n in set(recentes)),
+        # [lat, lon, detecções, última detecção em minutos desde 1970 (UTC)]
+        'celulas': sorted(([round(i * CELULA, 3), round(j * CELULA, 3), n, ult] for (i, j), (ult, n) in celulas.items()),
+                          key=lambda c: -c[3]),
+    }
+
+
 FONTES = [
     ('defesa-civil', 'Defesa Civil (IDAP)', fonte_defesa_civil),
     ('marinha', 'Marinha (CHM)', fonte_marinha),
@@ -492,6 +587,22 @@ def main():
     except Exception as e:
         resultado['fontes']['inmet'] = {'nome': 'INMET (cópia)', 'ok': False, 'erro': str(e)[:300]}
         print(f'INMET (cópia): ERRO {e}')
+    t0 = time.time()
+    try:
+        focos = fonte_focos(os.environ.get('FOCOS_ANTERIOR', 'anterior/focos.json'))
+        with open(os.path.join(pasta, 'focos.json'), 'w', encoding='utf-8') as f:
+            json.dump(focos, f, separators=(',', ':'))
+        resultado['fontes']['queimadas'] = {'nome': 'Focos de incêndio (INPE)', 'ok': True, 'quantidade': len(focos['celulas'])}
+        print(f'Focos de incêndio (INPE): {len(focos["celulas"])} área(s) em {time.time() - t0:.1f}s')
+    except Exception as e:
+        resultado['fontes']['queimadas'] = {'nome': 'Focos de incêndio (INPE)', 'ok': False, 'erro': str(e)[:300]}
+        print(f'Focos de incêndio (INPE): ERRO {e}')
+        # mantém a última versão para não apagar o mapa por causa de uma falha passageira
+        try:
+            import shutil
+            shutil.copy(os.environ.get('FOCOS_ANTERIOR', 'anterior/focos.json'), os.path.join(pasta, 'focos.json'))
+        except Exception:
+            pass
     resultado['alertas'].sort(key=lambda a: -a['nivel'])
     # A cópia do INMET vai num arquivo à parte: o app só baixa quando o INMET não responde
     inmet = resultado.pop('inmet_bruto')

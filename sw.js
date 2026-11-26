@@ -1,7 +1,7 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v4';
+const VERSAO = 'wc-v5';
 const APP = ['./', 'index.html', 'styles.css', 'visual.css', 'manifest.webmanifest',
-  'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js',
+  'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 

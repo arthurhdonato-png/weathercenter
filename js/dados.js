@@ -12,6 +12,7 @@ export const API = {
   inmetSite: 'https://alertas2.inmet.gov.br/',
   // Arquivo gerado a cada ~5 min pelo coletor (GitHub Actions, ramo "dados")
   coletor: 'https://raw.githubusercontent.com/arthurhdonato-png/weathercenter/dados/alertas.json',
+  focos: 'https://raw.githubusercontent.com/arthurhdonato-png/weathercenter/dados/focos.json',
   radar: 'https://api.rainviewer.com/public/weather-maps.json',
 };
 
@@ -165,6 +166,7 @@ export const FONTES_ALERTA = [
   { id: 'defesa-civil', nome: 'Defesa Civil', descricao: 'Alertas da Defesa Civil nacional, estaduais e municipais (os mesmos do SMS 40199 e do Defesa Civil Alerta), pela IDAP em formato CAP', site: 'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1', ativa: 'coletor' },
   { id: 'cemaden', nome: 'Cemaden', descricao: 'Alertas de risco de inundação e deslizamento enviados aos municípios monitorados', site: 'https://painelalertas.cemaden.gov.br/', ativa: false, motivo: 'O site não permite leitura automática (robots.txt). Quando a Defesa Civil transforma o alerta em aviso à população, ele aparece aqui pela Defesa Civil.' },
   { id: 'marinha', nome: 'Marinha (CHM)', descricao: 'Avisos de mau tempo para o mar e o litoral: ressaca, vento forte e mar grosso', site: 'https://www.marinha.mil.br/chm/dados-do-smm-avisos-de-mau-tempo/avisos-de-mau-tempo', ativa: 'coletor' },
+  { id: 'queimadas', nome: 'Incêndios (INPE)', descricao: 'Focos de incêndio detectados por satélite nas últimas 24 horas (Programa Queimadas)', site: 'https://terrabrasilis.dpi.inpe.br/queimadas/portal/', ativa: 'coletor' },
   { id: 'estaduais', nome: 'Centros estaduais', descricao: 'Simepar, Epagri/Ciram, Funceme, APAC, Inea, CGE-SP, Alerta Rio e outros', site: '', ativa: false, motivo: 'Não têm feed aberto. Quando a Defesa Civil do estado ou da cidade repassa o alerta, ele aparece aqui pela Defesa Civil.' },
   { id: 'cptec', nome: 'CPTEC/INPE', descricao: 'Centro de Previsão de Tempo e Estudos Climáticos', site: 'https://www.cptec.inpe.br/', ativa: false, motivo: 'Não oferece uma lista aberta de avisos ativos.' },
   { id: 'hidro', nome: 'SGB e ANA', descricao: 'Sistemas de alerta de cheias dos rios', site: 'https://www.sgb.gov.br/sace/', ativa: false, motivo: 'Publicam boletins em PDF por bacia, sem formato de alerta que o app possa ler com segurança.' },
