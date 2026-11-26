@@ -4,6 +4,8 @@ import { $, esc, UF_NOMES, UF_POR_CODIGO } from './util.js';
 import { todosAlertas, municipiosDoEstado, FONTES_ALERTA } from './dados.js';
 import { basemap, linhasEstados } from './mapas.js';
 import { cartaoAlerta } from './previsao.js';
+import { rotulosCidades } from './rotulosCidades.js';
+import { camadaIncendios } from './incendios.js';
 
 const CODIGO_POR_UF = Object.fromEntries(Object.entries(UF_POR_CODIGO).map(([c, uf]) => [uf, c]));
 
@@ -93,12 +95,22 @@ function renderFontes() {
 
 export async function iniciarAlertasMapa() {
   if (estado.mapa) { estado.mapa.invalidateSize(); return; }
-  const mapa = L.map('mapa-alertas', { minZoom: 3, maxZoom: 11, zoomSnap: 0.5 }).fitBounds([[-33.8, -74], [5.3, -34.8]]);
+  const mapa = L.map('mapa-alertas', { minZoom: 3, maxZoom: 13, zoomSnap: 0.5 }).fitBounds([[-33.8, -74], [5.3, -34.8]]);
   estado.mapa = mapa;
   mapa.createPane('areasAlerta').style.zIndex = 380;
   mapa.createPane('linhas').style.zIndex = 400;
-  basemap(mapa);
+  basemap(mapa, { rotulos: false });
   linhasEstados(mapa);
+  rotulosCidades(mapa);
+
+  // Incêndios: liga/desliga na legenda
+  const fogo = camadaIncendios(mapa);
+  const caixaFogo = $('mostrar-fogo');
+  caixaFogo.checked = fogo.ligado;
+  caixaFogo.addEventListener('change', () => fogo.ligar(caixaFogo.checked));
+  fogo.carregar().then((n) => {
+    $('fogo-qtd').textContent = n ? `${n.toLocaleString('pt-BR')} áreas` : 'nenhum foco';
+  }).catch((e) => { console.warn('focos', e); $('fogo-qtd').textContent = 'indisponível'; });
 
   $('alertas-uf').innerHTML = `<option value="">Todo o Brasil</option>${Object.entries(UF_NOMES).sort((a, b) => a[1].localeCompare(b[1])).map(([s, n]) => `<option value="${s}">${n}</option>`).join('')}`;
   $('alertas-uf').addEventListener('change', (e) => {
