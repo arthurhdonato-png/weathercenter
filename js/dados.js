@@ -322,15 +322,14 @@ export function alertaAfetaCidade(a, cidade) {
     const id7 = String(cidade.id), id6 = id7.slice(0, 6);
     return a.geocodes.some((c) => c === id7 || c === id6);
   }
-  if (cidade.lat != null && a.poligonos.length) {
-    return a.poligonos.some((p) => pontoNoPoligono(cidade.lat, cidade.lon, p));
-  }
+  // Polígono pequeno (ex.: só a margem de um rio) pode não conter o centro da cidade: aí vale o nome da área
+  if (cidade.lat != null && a.poligonos.some((p) => pontoNoPoligono(cidade.lat, cidade.lon, p))) return true;
   const texto = norm(a.areaTexto);
   if (!texto) return false;
   const alvo = norm(cidade.nome);
   return texto.split(/[,;]/).some((parte) => {
     const p = parte.trim();
-    return p === alvo || p.startsWith(`${alvo} -`) || p.startsWith(`${alvo} (`);
+    return p === alvo || p.startsWith(`${alvo} -`) || p.startsWith(`${alvo} (`) || p.startsWith(`${alvo}/`);
   });
 }
 

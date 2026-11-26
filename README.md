@@ -39,6 +39,9 @@ Algumas fontes não podem ser lidas direto pelo navegador. O arquivo `coletor/co
 - Para testar no computador: `python3 coletor/coletar.py saida` e veja `saida/alertas.json`.
 - Para incluir uma fonte nova: escreva uma função `fonte_xxx()` em `coletar.py` que devolva a lista de alertas no formato comum e coloque-a na lista `FONTES`.
 
+## Avisos no celular
+Notificações push dos alertas novos para as cidades que cada pessoa escolher, mesmo com o app fechado. Enviadas pelo mesmo GitHub Actions, com as inscrições guardadas no Supabase (grátis). Configuração e limitações: [`notificador/LEIAME.md`](notificador/LEIAME.md).
+
 ## Estrutura
 Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL).
 
