@@ -152,11 +152,12 @@ def simplificar(pontos, tolerancia):
         i, j = pilha.pop()
         (y1, x1), (y2, x2) = pontos[i], pontos[j]
         dy, dx = y2 - y1, x2 - x1
-        norma = (dx * dx + dy * dy) ** 0.5 or 1e-12
+        norma = (dx * dx + dy * dy) ** 0.5
         maior, k = 0, None
         for n in range(i + 1, j):
             y, x = pontos[n]
-            d = abs(dy * (x - x1) - dx * (y - y1)) / norma
+            # anel fechado (1º ponto = último): mede a distância até o ponto
+            d = abs(dy * (x - x1) - dx * (y - y1)) / norma if norma > 1e-12 else ((y - y1) ** 2 + (x - x1) ** 2) ** 0.5
             if d > maior:
                 maior, k = d, n
         if k is not None and maior > tolerancia:
@@ -259,6 +260,8 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     if len(partes) > 1 and re.match(r'defesa civil\s*:', sem_acento(partes[0])):
         descricao = '\n'.join(partes[1:])  # a 1ª linha costuma ser a versão SMS (sem acentos) do mesmo texto
     riscos = linhas(descricao) if descricao and descricao.strip() != headline.strip() else []
+    if len(riscos) > 1:
+        riscos = [r for r in riscos if not re.match(r'defesa civil\s*:', sem_acento(r))] or riscos
     if headline and len(headline) > 140:
         riscos.insert(0, headline)
     if titulo.isupper():
@@ -405,12 +408,13 @@ def fonte_marinha():
         detalhe = re.sub(r'\s+', ' ', m[11]).strip()
         # A área (Alfa, Bravo...) aparece no texto completo do aviso, quando a página o traz
         areas_achadas = []
-        completo = re.search(rf'AVISO\s+NR\s+0*{numero}\s*/\s*\d{{4}}', texto)
-        if completo:
+        for completo in re.finditer(rf'AVISO\s+NR\s+0*{numero}\s*/\s*\d{{4}}', texto):
             corpo = texto[completo.end(): completo.end() + 2500]
             ate = re.search(r'V[ÁA]LIDO AT[ÉE]\s+\d{6}Z', corpo)
             corpo = corpo[:ate.end()] if ate else corpo
-            areas_achadas = RE_AREA.findall(corpo) or RE_AREA.findall(texto[:completo.start()])[-1:]
+            for a in RE_AREA.findall(corpo) or RE_AREA.findall(texto[:completo.start()])[-1:]:
+                if a not in areas_achadas:
+                    areas_achadas.append(a)
             detalhe_completo = re.sub(r'\s+', ' ', corpo).strip()
             if len(detalhe_completo) > len(detalhe):
                 detalhe = detalhe_completo[:600]
@@ -489,6 +493,11 @@ def main():
         resultado['fontes']['inmet'] = {'nome': 'INMET (cópia)', 'ok': False, 'erro': str(e)[:300]}
         print(f'INMET (cópia): ERRO {e}')
     resultado['alertas'].sort(key=lambda a: -a['nivel'])
+    # A cópia do INMET vai num arquivo à parte: o app só baixa quando o INMET não responde
+    inmet = resultado.pop('inmet_bruto')
+    if inmet is not None:
+        with open(os.path.join(pasta, 'inmet.json'), 'w', encoding='utf-8') as f:
+            json.dump(inmet, f, ensure_ascii=False, separators=(',', ':'))
     caminho = os.path.join(pasta, 'alertas.json')
     with open(caminho, 'w', encoding='utf-8') as f:
         json.dump(resultado, f, ensure_ascii=False, separators=(',', ':'))

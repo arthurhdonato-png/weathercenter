@@ -317,11 +317,14 @@ export async function todosAlertas() {
       const agora = Date.now();
       alertas.push(...(d.alertas || []).map(normalizarColetor).filter((a) => !a.fim || +a.fim > agora));
       // INMET fora do ar para o navegador: usa a cópia feita pelo coletor
-      if (!status.inmet && d.inmet_bruto) {
-        const brutos = Array.isArray(d.inmet_bruto) ? d.inmet_bruto : [...(d.inmet_bruto.hoje || []), ...(d.inmet_bruto.futuro || [])];
-        const vistos = new Set();
-        alertas.push(...brutos.map(normalizarINMET).filter((a) => (vistos.has(a.id) ? false : vistos.add(a.id))));
-        status.inmet = 'ok';
+      if (!status.inmet && d.fontes?.inmet?.ok) {
+        try {
+          const bruto = await getJSON(API.coletor.replace('alertas.json', `inmet.json?v=${Math.floor(Date.now() / 120000)}`), 25000);
+          const brutos = Array.isArray(bruto) ? bruto : [...(bruto.hoje || []), ...(bruto.futuro || [])];
+          const vistos = new Set();
+          alertas.push(...brutos.map(normalizarINMET).filter((a) => (vistos.has(a.id) ? false : vistos.add(a.id))));
+          status.inmet = 'ok';
+        } catch (e) { console.warn('cópia do inmet', e); }
       }
     }
   } else {
