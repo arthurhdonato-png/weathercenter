@@ -2,7 +2,7 @@
 /* global L */
 import { $, esc, UF_NOMES, UF_POR_CODIGO } from './util.js';
 import { todosAlertas, municipiosDoEstado, FONTES_ALERTA } from './dados.js';
-import { basemap, linhasEstados } from './mapas.js';
+import { basemap } from './mapaBase.js';
 import { cartaoAlerta } from './previsao.js';
 import { rotulosCidades } from './rotulosCidades.js';
 import { camadaIncendios } from './incendios.js';
@@ -95,13 +95,15 @@ function renderFontes() {
 
 export async function iniciarAlertasMapa() {
   if (estado.mapa) { estado.mapa.invalidateSize(); return; }
-  const mapa = L.map('mapa-alertas', { minZoom: 3, maxZoom: 13, zoomSnap: 0.5 }).fitBounds([[-33.8, -74], [5.3, -34.8]]);
+  const mapa = L.map('mapa-alertas', { zoomControl: false, minZoom: 3, maxZoom: 14, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 })
+    .fitBounds([[-33.8, -74], [5.3, -34.8]]);
+  L.control.zoom({ position: 'bottomright' }).addTo(mapa);
+  mapa.attributionControl.setPrefix(false);
   estado.mapa = mapa;
   mapa.createPane('areasAlerta').style.zIndex = 380;
   mapa.createPane('linhas').style.zIndex = 400;
-  basemap(mapa, { rotulos: false });
-  linhasEstados(mapa);
-  rotulosCidades(mapa);
+  // Com o mapa vetorial, os nomes das cidades já vêm do mapa de fundo; sem ele, o app escreve os nomes
+  basemap(mapa).then(({ vetorial }) => { if (!vetorial) rotulosCidades(mapa); });
 
   // Incêndios: liga/desliga na legenda
   const fogo = camadaIncendios(mapa);

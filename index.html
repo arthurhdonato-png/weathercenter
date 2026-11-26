@@ -4,169 +4,164 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WeatherCenter</title>
-  <meta name="description" content="Previsão do tempo, mapas e alertas meteorológicos para todas as cidades do Brasil.">
-  <meta name="theme-color" content="#2a6fb8">
+  <meta name="description" content="Previsão do tempo por consenso de vários institutos, mapas e alertas meteorológicos para todas as cidades do Brasil.">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1b1a18" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WeatherCenter">
+  <link rel="preload" href="vendor/fontes/noto-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="visual.css">
 </head>
 <body data-aba="previsao">
-  <header class="topo">
-    <div class="topo-linha">
-      <a class="marca" href="./" aria-label="WeatherCenter, início">
-        <img src="icons/icon.svg" alt="" width="34" height="34">
-        <span>WeatherCenter</span>
-      </a>
-      <nav class="abas-topo" aria-label="Seções">
-        <a href="#previsao" data-aba="previsao">Previsão</a>
-        <a href="#mapas" data-aba="mapas">Mapas</a>
-        <a href="#alertas" data-aba="alertas">Alertas</a>
-      </nav>
-      <button id="btn-instalar" class="btn-vidro" hidden>Instalar app</button>
-    </div>
+  <header class="topo" id="topo">
+    <a class="marca" href="./" aria-label="WeatherCenter, início">
+      <img src="icons/icon.svg" alt="" width="26" height="26">
+      <span>WeatherCenter</span>
+    </a>
 
     <div class="busca" role="search">
       <label for="campo-busca" class="sr">Buscar cidade</label>
-      <span class="busca-lupa" aria-hidden="true">🔎</span>
+      <span class="busca-lupa" data-icone="busca"></span>
       <input id="campo-busca" type="search" autocomplete="off" spellcheck="false"
              placeholder="Buscar cidade do Brasil" aria-autocomplete="list" aria-controls="sugestoes" aria-expanded="false">
-      <button id="btn-local" class="btn-local" type="button" title="Usar minha localização" aria-label="Usar minha localização">📍</button>
+      <button id="btn-local" class="btn-icone" type="button" title="Usar minha localização" aria-label="Usar minha localização" data-icone="local"></button>
       <ul id="sugestoes" class="sugestoes" role="listbox" hidden></ul>
     </div>
-    <div id="recentes" class="recentes"></div>
+
+    <nav class="abas-topo" aria-label="Seções">
+      <a href="#previsao" data-aba="previsao">Previsão</a>
+      <a href="#mapas" data-aba="mapas">Mapas</a>
+      <a href="#alertas" data-aba="alertas">Alertas</a>
+    </nav>
+    <button id="btn-instalar" class="btn-sec" type="button" hidden>Instalar app</button>
   </header>
 
   <main>
     <p id="status" class="status" role="status" aria-live="polite" hidden></p>
 
     <!-- ================= PREVISÃO ================= -->
-    <section id="aba-previsao" class="aba">
+    <section id="aba-previsao" class="aba aba-previsao">
+      <div id="recentes" class="recentes" aria-label="Cidades recentes"></div>
+
       <section id="boas-vindas" class="cartao boas-vindas">
-        <div class="bv-icone" aria-hidden="true">🌦️</div>
-        <h2>Previsão do tempo para todo o Brasil</h2>
-        <p>Previsão por consenso de vários institutos e modelos meteorológicos do mundo, com as próximas horas, os próximos 10 dias, mapas e os alertas oficiais para qualquer um dos 5.570 municípios.</p>
-        <button id="btn-local-boas" class="btn" type="button">📍 Usar minha localização</button>
+        <h1>Previsão do tempo para todo o Brasil</h1>
+        <p>Consenso de vários institutos e modelos meteorológicos do mundo, com as próximas horas, os próximos 10 dias, mapas e os alertas oficiais para qualquer um dos 5.570 municípios.</p>
+        <button id="btn-local-boas" class="btn" type="button">Usar minha localização</button>
         <p class="pequeno">ou busque uma cidade no campo acima</p>
       </section>
 
-      <div id="painel" hidden>
-        <header class="hero" id="hero"></header>
-        <div id="alertas-cidade" class="alertas-cidade"></div>
+      <div id="painel" class="painel" hidden>
+        <section id="faixa-alertas" class="faixa-alertas" aria-live="polite" hidden></section>
+        <article class="cartao agora" id="hero"></article>
 
-        <div class="grade-previsao">
-          <div class="col-principal">
-            <article class="cartao" id="w-chuva" hidden></article>
+        <article class="cartao resumo" id="c-resumo">
+          <h2 class="rotulo">Resumo</h2>
+          <ul id="resumo" class="resumo-lista"></ul>
+          <div id="alertas-cidade" class="alertas-cidade"></div>
+        </article>
 
-            <article class="cartao" id="c-horas">
-              <p id="resumo-horas" class="resumo resumo-topo"></p>
-              <div class="horas-caixa">
-                <button type="button" class="horas-seta esq" data-rolar="-1" aria-label="Horas anteriores">‹</button>
-                <ul id="horas" class="horas" tabindex="0" aria-label="Previsão por hora"></ul>
-                <button type="button" class="horas-seta dir" data-rolar="1" aria-label="Próximas horas">›</button>
-              </div>
-              <details class="mais">
-                <summary>Gráfico e tabela das próximas 24 horas</summary>
-                <div id="grafico-24h" class="grafico-caixa"></div>
-                <div id="tabela-24h"></div>
-              </details>
-            </article>
-
-            <article class="cartao" id="c-dias">
-              <h2 class="rotulo"><span aria-hidden="true">📅</span><span id="dias-titulo">Previsão para 10 dias</span></h2>
-              <ul id="dias" class="dias"></ul>
-            </article>
+        <article class="cartao horas-cartao" id="c-horas">
+          <div class="cartao-topo">
+            <h2 class="rotulo">Próximas 24 horas</h2>
+            <p id="resumo-horas" class="resumo-horas"></p>
           </div>
-
-          <div class="col-lateral">
-            <div class="quadros">
-              <article class="cartao quadro" id="w-sensacao"></article>
-              <article class="cartao quadro" id="w-uv"></article>
-              <article class="cartao quadro largo" id="w-vento"></article>
-              <article class="cartao quadro" id="w-precip"></article>
-              <article class="cartao quadro" id="w-sol"></article>
-              <article class="cartao quadro" id="w-umidade"></article>
-              <article class="cartao quadro" id="w-visib"></article>
-              <article class="cartao quadro" id="w-pressao"></article>
-              <article class="cartao quadro" id="w-ar"></article>
-              <article class="cartao quadro largo" id="w-lua"></article>
-            </div>
-            <article class="cartao" id="c-fontes" hidden></article>
+          <div class="horas-caixa">
+            <button type="button" class="horas-seta esq" data-rolar="-1" aria-label="Horas anteriores">‹</button>
+            <div id="horas" class="horas" tabindex="0" aria-label="Previsão por hora"></div>
+            <button type="button" class="horas-seta dir" data-rolar="1" aria-label="Próximas horas">›</button>
           </div>
+          <article id="w-chuva" class="chuva-curta" hidden></article>
+          <details class="mais">
+            <summary>Tabela completa das próximas 24 horas</summary>
+            <div id="tabela-24h"></div>
+          </details>
+        </article>
+
+        <article class="cartao dias-cartao" id="c-dias">
+          <h2 class="rotulo" id="dias-titulo">Próximos 10 dias</h2>
+          <ul id="dias" class="dias"></ul>
+        </article>
+
+        <div class="quadros" id="quadros">
+          <article class="cartao quadro" id="w-sensacao"></article>
+          <article class="cartao quadro" id="w-umidade"></article>
+          <article class="cartao quadro" id="w-vento"></article>
+          <article class="cartao quadro" id="w-precip"></article>
+          <article class="cartao quadro" id="w-uv"></article>
+          <article class="cartao quadro" id="w-sol"></article>
+          <article class="cartao quadro" id="w-visib"></article>
+          <article class="cartao quadro" id="w-pressao"></article>
+          <article class="cartao quadro" id="w-ar"></article>
+          <article class="cartao quadro" id="w-lua"></article>
         </div>
+
+        <article class="cartao fontes-cartao" id="c-fontes" hidden></article>
       </div>
+
+      <footer class="rodape">
+        <p>Previsão: consenso de modelos via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0; ECMWF, NOAA, DWD, Met Office, Météo-France e outros), <a href="https://api.met.no/" target="_blank" rel="noopener">MET Norway</a> (CC BY 4.0) e <a href="https://portal.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
+          Qualidade do ar: Open-Meteo · Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a>, Defesa Civil e Marinha ·
+          Municípios e contornos: <a href="https://servicodados.ibge.gov.br/api/docs" target="_blank" rel="noopener">IBGE</a> ·
+          Mapas: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> e <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
+        <p>Em emergências, ligue <strong>199</strong> (Defesa Civil) ou <strong>193</strong> (Bombeiros).</p>
+      </footer>
     </section>
 
     <!-- ================= MAPAS ================= -->
-    <section id="aba-mapas" class="aba" hidden>
-      <article class="cartao mapa-cartao">
-        <div class="mapa-topo">
-          <h2>Mapas do tempo</h2>
-          <label class="radar"><input type="checkbox" id="radar-check"> Radar de chuva <span id="radar-info" class="pequeno"></span></label>
+    <section id="aba-mapas" class="aba aba-mapa" hidden>
+      <div class="mapa-tela">
+        <div id="mapa-tempo" class="mapa"></div>
+        <div class="mapa-flutuante mapa-camadas-caixa">
+          <div id="mapa-camadas" class="segmentos" role="toolbar" aria-label="Camada do mapa"></div>
+          <label class="interruptor"><input type="checkbox" id="radar-check"><span class="trilho" aria-hidden="true"></span> Radar <span id="radar-info" class="radar-info"></span></label>
         </div>
-        <div id="mapa-camadas" class="chips" role="toolbar" aria-label="Camada do mapa"></div>
-        <div class="mapa-caixa">
-          <div id="mapa-tempo" class="mapa"></div>
-          <div id="mapa-status" class="mapa-status" hidden></div>
-          <div id="mapa-legenda" class="mapa-legenda"></div>
+        <div id="mapa-legenda" class="mapa-flutuante mapa-legenda"></div>
+        <div class="mapa-flutuante linha-tempo">
+          <button type="button" id="mapa-tocar" class="btn-tocar" aria-pressed="false" aria-label="Animar as próximas 24 horas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+          <input type="range" id="mapa-hora" min="0" max="24" value="0" step="0.25" aria-label="Horário">
+          <span id="mapa-hora-rotulo" class="hora-rotulo"></span>
         </div>
-        <div class="mapa-tempo-ctrl">
-          <label for="mapa-hora">Horário</label>
-          <input type="range" id="mapa-hora" min="0" max="24" value="0" step="1">
-          <span id="mapa-hora-rotulo" class="pequeno"></span>
-        </div>
-        <p class="nota">Toque no mapa para ver o valor e abrir a previsão do local. Os valores são aproximados por região (grade de cerca de 140 km).</p>
-      </article>
+        <div id="mapa-status" class="mapa-status" hidden></div>
+      </div>
     </section>
 
     <!-- ================= ALERTAS ================= -->
-    <section id="aba-alertas" class="aba" hidden>
-      <article class="cartao mapa-cartao">
-        <div class="mapa-topo">
-          <h2>Alertas no Brasil</h2>
-          <select id="alertas-uf" aria-label="Filtrar por estado"></select>
-        </div>
-        <div class="mapa-caixa">
+    <section id="aba-alertas" class="aba aba-mapa" hidden>
+      <div class="alertas-tela">
+        <div class="mapa-tela">
           <div id="mapa-alertas" class="mapa"></div>
-          <div id="alertas-status" class="mapa-status" hidden></div>
-          <div class="mapa-legenda leg-alertas">
+          <div class="mapa-flutuante alertas-filtro">
+            <select id="alertas-uf" aria-label="Filtrar por estado"></select>
+          </div>
+          <div class="mapa-flutuante mapa-legenda leg-alertas">
             <div class="leg-titulo">Alertas</div>
             <div><span class="q" style="background:#FFD400"></span>Perigo potencial</div>
             <div><span class="q" style="background:#FF8C00"></span>Perigo</div>
             <div><span class="q" style="background:#E60000"></span>Grande perigo</div>
-            <label class="leg-fogo"><input type="checkbox" id="mostrar-fogo" checked> <span aria-hidden="true">🔥</span> Incêndios 24 h <small id="fogo-qtd"></small></label>
+            <label class="leg-fogo"><input type="checkbox" id="mostrar-fogo" checked> Incêndios 24 h <small id="fogo-qtd"></small></label>
           </div>
+          <div id="alertas-status" class="mapa-status" hidden></div>
         </div>
-        <p class="nota">Toque em uma área colorida para ver os alertas daquele local, ou em um 🔥 para ver o foco de incêndio. Aproxime o mapa para ver mais cidades.</p>
-      </article>
-      <div class="grade-alertas">
-        <div id="alertas-lista"></div>
-        <article class="cartao">
-          <h2>Fontes de alertas</h2>
-          <ul id="alertas-fontes" class="fontes"></ul>
-        </article>
+        <aside class="alertas-painel">
+          <div id="alertas-lista"></div>
+          <section class="cartao">
+            <h2 class="rotulo">Fontes de alertas</h2>
+            <ul id="alertas-fontes" class="fontes"></ul>
+          </section>
+          <p class="nota">Toque em uma área colorida para ver os alertas daquele local, ou num ícone de fogo para ver o foco de incêndio.</p>
+        </aside>
       </div>
     </section>
   </main>
 
-  <footer class="rodape">
-    <p>Previsão: consenso de modelos via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0; ECMWF, NOAA, DWD, Met Office, Météo-France e outros), <a href="https://api.met.no/" target="_blank" rel="noopener">MET Norway</a> (CC BY 4.0) e <a href="https://portal.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
-      Qualidade do ar: Open-Meteo ·
-      Alertas: <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">INMET</a> ·
-      Municípios e contornos: <a href="https://servicodados.ibge.gov.br/api/docs" target="_blank" rel="noopener">IBGE</a> ·
-      Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>
-    <p>Em emergências, ligue <strong>199</strong> (Defesa Civil) ou <strong>193</strong> (Bombeiros).</p>
-  </footer>
-
   <nav class="abas-baixo" aria-label="Seções">
-    <a href="#previsao" data-aba="previsao"><span aria-hidden="true">🌤️</span>Previsão</a>
-    <a href="#mapas" data-aba="mapas"><span aria-hidden="true">🗺️</span>Mapas</a>
-    <a href="#alertas" data-aba="alertas"><span aria-hidden="true">⚠️</span>Alertas</a>
+    <a href="#previsao" data-aba="previsao"><span data-icone="previsao"></span>Previsão</a>
+    <a href="#mapas" data-aba="mapas"><span data-icone="mapa"></span>Mapas</a>
+    <a href="#alertas" data-aba="alertas"><span data-icone="alerta"></span>Alertas</a>
   </nav>
 
   <script src="vendor/leaflet/leaflet.js"></script>

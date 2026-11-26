@@ -344,11 +344,11 @@ export function pontoNoPoligono(lat, lon, anel) {
 }
 
 /* ======================= Grade para os mapas ======================= */
-export const CAMPOS_MAPA = 'temperature_2m,apparent_temperature,uv_index,wind_speed_10m,wind_direction_10m,precipitation,relative_humidity_2m,visibility,pressure_msl';
+export const CAMPOS_MAPA = 'temperature_2m,apparent_temperature,uv_index,wind_speed_10m,wind_direction_10m,precipitation,relative_humidity_2m,visibility,pressure_msl,cloud_cover';
 
 // Busca a previsão das próximas ~30 horas para uma lista de pontos (em lotes)
 export async function gradeMapa(pontos) {
-  const chave = `wc:grade:${pontos.length}:${pontos[0]?.join()}`;
+  const chave = `wc:grade2:${pontos.length}:${pontos[0]?.join()}`;
   return comCache(chave, 45 * 60 * 1000, async () => {
     const lotes = [];
     for (let i = 0; i < pontos.length; i += 100) lotes.push(pontos.slice(i, i + 100));

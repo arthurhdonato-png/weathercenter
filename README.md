@@ -5,11 +5,13 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 ## O que faz
 - **Busca e localização**: qualquer município (lista oficial do IBGE) ou a localização atual do celular.
 - **Previsão por consenso**: cada valor (agora, por hora e por dia) junta 11 modelos globais (ECMWF IFS e AIFS, Met Office, ICON/DWD, GFS/NOAA, ARPEGE/Météo-France, GEM/Canadá, JMA/Japão, KMA/Coreia, BoM/Austrália e CMA/China, todos pela Open-Meteo), a MET Norway e as máximas e mínimas do INMET. Usa mediana ponderada (temperatura, umidade, vento, pressão), média sem extremos (chuva) e mostra quais fontes entraram, a faixa entre elas e a concordância. Código em `js/consenso.js`.
-- **Agora**: temperatura, sensação, condição, máxima e mínima, em destaque sobre um fundo que muda com o tempo e a hora do dia.
+- **Alertas em primeiro lugar**: quando há aviso oficial para a cidade (ou no estado), uma faixa na cor do alerta aparece no topo da previsão, antes de tudo.
+- **Resumo**: um quadro curto com o tempo agora, as próximas horas, amanhã e os pontos de atenção (alertas, UV, rajadas, calor, frio, ar seco, chuva forte).
+- **Agora**: temperatura, sensação, condição, máxima, mínima, chuva, vento, umidade e UV.
 - **Por hora**: faixa rolável das próximas 24 horas com nascer e pôr do sol, mais gráfico e tabela completa.
 - **10 dias**: barras de mínima e máxima (toque no dia para ver tudo, inclusive a opinião das fontes).
 - **Quadros**: chuva nas próximas 3 horas, sensação, UV, vento, chuva do dia, sol, umidade, visibilidade, pressão, qualidade do ar e lua.
-- **Mapas**: temperatura, sensação, UV, vento (com setas), precipitação, umidade, visibilidade e pressão, com controle de horário para as próximas 24 h, e radar de chuva.
+- **Mapas**: mapa de fundo com ruas, limites de estados e municípios e nomes em português; camadas suaves de temperatura, chuva, vento (partículas animadas), nuvens, sensação, umidade, UV, pressão e visibilidade, animação contínua das próximas 24 h e radar de chuva animado (últimos 80 min).
 - **Alertas**: mapa do Brasil com todos os avisos ativos nas cores originais, lista filtrável por estado e situação de cada fonte.
 
 ## Fontes de dados (gratuitas, sem chave)
@@ -22,7 +24,7 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 | Municípios e contornos | IBGE (API de localidades e de malhas) |
 | Nome da cidade pela localização | BigDataCloud (reverse geocode client) |
 | Radar | RainViewer |
-| Mapa de fundo | OpenStreetMap / CARTO |
+| Mapa de fundo | OpenFreeMap (mapas vetoriais do OpenStreetMap, desenhados pela MapLibre GL) |
 
 CPTEC/INPE tem previsão por cidade, mas o serviço não permite leitura direta por sites (sem CORS), por isso não entra no consenso.
 
@@ -38,6 +40,6 @@ Algumas fontes não podem ser lidas direto pelo navegador. O arquivo `coletor/co
 - Para incluir uma fonte nova: escreva uma função `fonte_xxx()` em `coletar.py` que devolva a lista de alertas no formato comum e coloque-a na lista `FONTES`.
 
 ## Estrutura
-Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` + `visual.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` (mapas).
+Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL).
 
 Para testar no computador: `python3 -m http.server` dentro da pasta e abrir http://localhost:8000.
