@@ -72,12 +72,13 @@ function alertasCompartilhados() {
 }
 
 let cidadeAtual = null;
-async function abrirCidade(cidade) {
+// trocarAba: false quando o app abre com #mapas ou #alertas no endereço (fica nessa aba)
+async function abrirCidade(cidade, { trocarAba = true } = {}) {
   const meu = ++pedido;
   fecharSugestoes();
   $('campo-busca').value = '';
   $('campo-busca').blur();
-  mostrarAba('previsao');
+  if (trocarAba) mostrarAba('previsao');
   setStatus(`Carregando o tempo em ${cidade.nome}…`);
   document.body.classList.add('carregando');
   try {
@@ -98,7 +99,7 @@ async function abrirCidade(cidade) {
     $('painel').hidden = false;
     // Cidade nova: começa do topo. Mesma cidade (atualização): a página fica onde está.
     const chaveCidade = c.id || `${c.nome}|${c.uf}|${c.local ? 'local' : ''}`;
-    if (cidadeAtual !== chaveCidade) window.scrollTo({ top: 0 });
+    if (cidadeAtual !== chaveCidade && abaAtual === 'previsao') window.scrollTo({ top: 0 });
     cidadeAtual = chaveCidade;
     $('boas-vindas').hidden = true;
     setStatus('');
@@ -125,21 +126,21 @@ async function abrirPonto(lat, lon) {
   abrirCidade(c);
 }
 
-async function usarLocalizacao() {
+async function usarLocalizacao(opcoes) {
   setStatus('Obtendo sua localização…');
   try {
     const { lat, lon } = await posicaoAtual();
     store.set('wc:usarLocal', true);
     const c = await cidadeDaPosicao(lat, lon);
     if (c.foraDoBrasil) setStatus('Você parece estar fora do Brasil. Mostrando a previsão mesmo assim.');
-    abrirCidade(c);
+    abrirCidade(c, opcoes);
   } catch (e) {
     store.set('wc:usarLocal', false);
     setStatus(e.message, true);
   }
 }
-$('btn-local').addEventListener('click', usarLocalizacao);
-$('btn-local-boas').addEventListener('click', usarLocalizacao);
+$('btn-local').addEventListener('click', () => usarLocalizacao());
+$('btn-local-boas').addEventListener('click', () => usarLocalizacao());
 
 /* ======================= Recentes ======================= */
 function salvarRecente(c) {
@@ -228,6 +229,7 @@ async function permissaoLocal() {
   try { return (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { return 'prompt'; }
 }
 
+const INICIO = { trocarAba: false };
 (async function iniciar() {
   renderRecentes();
   mostrarAba(location.hash.slice(1));
@@ -239,20 +241,20 @@ async function permissaoLocal() {
       if (/^\d{7}$/.test(param)) {
         await carregarMunicipios();
         const c = municipioPorId(param);
-        if (c) return abrirCidade(c);
+        if (c) return abrirCidade(c, INICIO);
       } else if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(param)) {
         const [lat, lon] = param.split(',').map(Number);
-        return abrirCidade(await cidadeDaPosicao(lat, lon));
+        return abrirCidade(await cidadeDaPosicao(lat, lon), INICIO);
       } else {
         const [nome, uf] = param.split('|');
-        return abrirCidade({ id: null, nome, uf: uf || '' });
+        return abrirCidade({ id: null, nome, uf: uf || '' }, INICIO);
       }
     } catch { /* segue */ }
   }
   const ultima = store.get('wc:ultima');
   const usarLocal = store.get('wc:usarLocal');
   // Abre na localização atual quando a pessoa já permitiu antes
-  if (usarLocal !== false && (await permissaoLocal()) === 'granted') return usarLocalizacao();
-  if (ultima && !ultima.local) return abrirCidade(ultima);
-  if (ultima?.local && usarLocal) return usarLocalizacao();
+  if (usarLocal !== false && (await permissaoLocal()) === 'granted') return usarLocalizacao(INICIO);
+  if (ultima && !ultima.local) return abrirCidade(ultima, INICIO);
+  if (ultima?.local && usarLocal) return usarLocalizacao(INICIO);
 })();
