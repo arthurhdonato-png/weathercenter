@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Gerar chave das notificações</title>
+  <style>
+    :root { --fundo: #f6f5f1; --sup: #fff; --texto: #1d1c1a; --sutil: #6c685f; --borda: #d3cfc4; --acento: #c0613d; }
+    @media (prefers-color-scheme: dark) { :root { --fundo: #1b1a18; --sup: #242320; --texto: #ecebe5; --sutil: #a8a499; --borda: #45423b; --acento: #dc805c; } }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.3rem; }
+    .caixa { background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; padding: 16px; margin: 16px 0; }
+    code, textarea { font-family: ui-monospace, Menlo, Consolas, monospace; }
+    textarea { width: 100%; box-sizing: border-box; font-size: .95rem; padding: 10px; border: 1px solid var(--borda); border-radius: 8px; background: var(--fundo); color: var(--texto); resize: none; }
+    button { border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 600; cursor: pointer; background: var(--texto); color: var(--fundo); font-size: .95rem; }
+    .sutil { color: var(--sutil); font-size: .9rem; }
+    .aviso { color: var(--acento); font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Chave das notificações do WeatherCenter</h1>
+  <p class="sutil">Esta página cria a chave que assina as notificações enviadas pelo GitHub Actions. Tudo acontece só neste navegador: a chave não é enviada para lugar nenhum.</p>
+
+  <div class="caixa">
+    <button type="button" id="gerar">Gerar chave</button>
+    <div id="resultado" hidden>
+      <p><strong>Valor do secret <code>VAPID_PRIVATE_KEY</code>:</strong></p>
+      <textarea id="privada" rows="2" readonly></textarea>
+      <p><button type="button" id="copiar">Copiar</button> <span id="copiado" class="sutil"></span></p>
+      <p class="aviso">Cole este valor só no GitHub (Settings → Secrets and variables → Actions → New repository secret). Não mande em chat nem e-mail.</p>
+      <p class="sutil">Gere a chave uma única vez. Se trocar depois, todos os aparelhos precisam ativar os avisos de novo.</p>
+    </div>
+  </div>
+</main>
+<script>
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  document.getElementById('gerar').addEventListener('click', async () => {
+    const par = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const jwk = await crypto.subtle.exportKey('jwk', par.privateKey);
+    document.getElementById('privada').value = jwk.d;
+    document.getElementById('resultado').hidden = false;
+  });
+  document.getElementById('copiar').addEventListener('click', async () => {
+    const campo = document.getElementById('privada');
+    try { await navigator.clipboard.writeText(campo.value); } catch { campo.select(); document.execCommand('copy'); }
+    document.getElementById('copiado').textContent = 'Copiado!';
+  });
+</script>
+</body>
+</html>

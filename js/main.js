@@ -7,6 +7,7 @@ import {
 import { renderAgora, renderResumo, renderChuvaProxima, renderWidgets, renderHoras, renderDias, renderFontes, renderAlertasCidade } from './previsao.js';
 import { iniciarMapas, pausarMapas } from './mapas.js';
 import { icone } from './icones.js';
+import { definirCidadeNotificacao, iniciarNotificacoes } from './notificacoes.js';
 
 // Ícones fixos da página (lupa, localização, barra inferior)
 document.querySelectorAll('[data-icone]').forEach((el) => { el.innerHTML = icone(el.dataset.icone); });
@@ -116,6 +117,7 @@ async function abrirCidade(cidade, { trocarAba = true } = {}) {
     $('boas-vindas').hidden = true;
     setStatus('');
     salvarRecente(c);
+    definirCidadeNotificacao(c);
     const params = new URLSearchParams();
     params.set('cidade', c.id || (c.local ? `${c.lat.toFixed(3)},${c.lon.toFixed(3)}` : `${c.nome}|${c.uf}`));
     history.replaceState(null, '', `?${params}${location.hash}`);
@@ -235,6 +237,7 @@ $('btn-instalar').addEventListener('click', async () => {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.warn));
 }
+iniciarNotificacoes();
 
 /* ======================= Início ======================= */
 async function permissaoLocal() {
