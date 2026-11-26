@@ -27,6 +27,7 @@ UA = 'WeatherCenter-coletor/1.0 (app de alertas sem fins comerciais)'
 UTC = timezone.utc
 BRT = timezone(timedelta(hours=-3))
 AGORA = datetime.now(UTC)
+DEBUG = os.environ.get('COLETOR_DEBUG') == '1'
 
 UF_POR_CODIGO = {
     '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
@@ -76,6 +77,8 @@ def robots_permite(url):
         except Exception:
             pass  # sem robots.txt (ou fora do ar): permitido
         _robots[base] = regras
+        if DEBUG:
+            print(f'  [debug] robots de {base}: {regras}')
     caminho = p.path or '/'
     return not any(caminho.startswith(r.rstrip('*')) for r in _robots[base])
 
@@ -284,8 +287,17 @@ def ler_feed_cap(url, fonte_id, fonte_nome, link_padrao, max_links=150):
 # ---------------------------------------------------------------- fontes
 def fonte_defesa_civil():
     """Defesa Civil (nacional, estaduais e municipais) pela IDAP, em CAP 1.2."""
-    return ler_feed_cap('https://idapfile.mdr.gov.br/idap/api/rss/cap', 'defesa-civil', 'Defesa Civil',
-                        'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1')
+    alertas = ler_feed_cap('https://idapfile.mdr.gov.br/idap/api/rss/cap', 'defesa-civil', 'Defesa Civil',
+                           'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1')
+    if DEBUG and alertas:
+        for a in alertas[:2]:
+            print('  [debug] exemplo:', json.dumps({**a, 'poligonos': f"{len(a['poligonos'])} anéis"}, ensure_ascii=False)[:1500])
+        aneis = sum(len(a['poligonos']) for a in alertas)
+        pts = sum(len(p) for a in alertas for p in a['poligonos'])
+        com_geo = sum(1 for a in alertas if a['geocodes'])
+        print(f'  [debug] {aneis} anéis, {pts} pontos, {com_geo} com geocode, '
+              f"tamanho sem polígonos {len(json.dumps([{**a, 'poligonos': []} for a in alertas])) // 1024} KB")
+    return alertas
 
 
 RISCOS_CEMADEN = {
@@ -380,6 +392,9 @@ def fonte_marinha():
     """Avisos de mau tempo da Marinha (CHM) para o litoral e alto-mar. Página HTML, sem feed."""
     url = 'https://www.marinha.mil.br/chm/dados-do-smm-avisos-de-mau-tempo/avisos-de-mau-tempo'
     texto = html_para_texto(baixar(url, timeout=60).decode('utf-8', 'replace'))
+    if DEBUG:
+        i = texto.find('AVISO')
+        print('  [debug] marinha texto:', repr(texto[max(0, i - 200): i + 2500]))
     alertas, vistos = [], set()
     marcas = list(re.finditer(r'AVISO\s+NR\s+(\d+)\s*/\s*(\d{4})', texto))
     for i, m in enumerate(marcas):

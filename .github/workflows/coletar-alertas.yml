@@ -37,6 +37,9 @@ jobs:
 
       - name: Buscar alertas
         run: python3 coletor/coletar.py saida
+        env:
+          # Nos testes de PR, mostra detalhes no log
+          COLETOR_DEBUG: ${{ github.event_name == 'pull_request' && '1' || '0' }}
 
       - name: Resumo
         if: always()
