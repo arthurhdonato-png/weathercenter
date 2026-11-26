@@ -1,0 +1,6 @@
+# Bibliotecas do detector WeatherCenter (instaladas pelo GitHub Actions a cada execução)
+numpy>=2.0
+scipy>=1.13
+eccodes>=2.38      # leitura dos modelos (GRIB2); já traz a biblioteca ecCodes
+netCDF4>=1.7       # leitura dos raios do satélite GOES (NetCDF)
+pillow>=10.0       # leitura das imagens do radar

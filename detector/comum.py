@@ -231,8 +231,34 @@ def contornos(mascara, lat0, lon0, passo, suavizar=2):
         # canto (linha, coluna) -> lat/lon. O canto (1,1) do pad é a borda noroeste da célula [0,0]
         anel_ll = [[round(lat0 + passo / 2 - (y - 1) * passo, 3), round(lon0 - passo / 2 + (x - 1) * passo, 3)] for y, x in pts]
         anel_ll.append(anel_ll[0])
-        res.append(anel_ll)
+        res.append(simplificar(anel_ll, passo * 0.15))
     return res
+
+
+def simplificar(anel, tol):
+    """Douglas-Peucker: tira pontos que quase não mudam o desenho (tol em graus)."""
+    if len(anel) < 6:
+        return anel
+    pts = anel
+    manter = [False] * len(pts)
+    manter[0] = manter[-1] = True
+    pilha = [(0, len(pts) - 1)]
+    while pilha:
+        i, j = pilha.pop()
+        (y1, x1), (y2, x2) = pts[i], pts[j]
+        dy, dx = y2 - y1, x2 - x1
+        norma = (dx * dx + dy * dy) ** 0.5
+        maior, k = 0, None
+        for n in range(i + 1, j):
+            y, x = pts[n]
+            d = abs(dy * (x - x1) - dx * (y - y1)) / norma if norma > 1e-12 else ((y - y1) ** 2 + (x - x1) ** 2) ** 0.5
+            if d > maior:
+                maior, k = d, n
+        if k is not None and maior > tol:
+            manter[k] = True
+            pilha += [(i, k), (k, j)]
+    res = [p for p, m in zip(pts, manter) if m]
+    return res if len(res) >= 4 else anel
 
 
 def casco_convexo(pontos):

@@ -162,6 +162,7 @@ export const municipiosDoEstado = (codigoUF) => malha(`estados/${codigoUF}`, 'in
 
 // ativa: 'direto' (o navegador lê a fonte), 'coletor' (lida pelo coletor automático) ou false (sem dados abertos)
 export const FONTES_ALERTA = [
+  { id: 'weathercenter', nome: 'WeatherCenter', descricao: 'Detecção própria e automática (não oficial): tempestades vistas por raios de satélite e radar, com trajetória e horário de chegada; observações de aeroportos; e previsão de 48 h de chuva, vento, temporais e tornado pelo consenso dos modelos GFS e ECMWF', site: 'https://github.com/arthurhdonato-png/weathercenter/blob/main/detector/CRITERIOS.md', ativa: 'coletor' },
   { id: 'inmet', nome: 'INMET', descricao: 'Instituto Nacional de Meteorologia: avisos de chuva, vento, calor, frio, baixa umidade e outros', site: API.inmetSite, ativa: 'direto' },
   { id: 'defesa-civil', nome: 'Defesa Civil', descricao: 'Alertas da Defesa Civil nacional, estaduais e municipais (os mesmos do SMS 40199 e do Defesa Civil Alerta), pela IDAP em formato CAP', site: 'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1', ativa: 'coletor' },
   { id: 'cemaden', nome: 'Cemaden', descricao: 'Alertas de risco de inundação e deslizamento enviados aos municípios monitorados', site: 'https://painelalertas.cemaden.gov.br/', ativa: false, motivo: 'O site não permite leitura automática (robots.txt). Quando a Defesa Civil transforma o alerta em aviso à população, ele aparece aqui pela Defesa Civil.' },
@@ -257,7 +258,7 @@ async function alertasINMET() {
   return brutos.map(normalizarINMET).filter((a) => (vistos.has(a.id) ? false : vistos.add(a.id)));
 }
 
-// Arquivo do coletor automático (Defesa Civil, Cemaden, Marinha e cópia do INMET)
+// Arquivo do coletor automático (Defesa Civil, Marinha, alertas próprios do WeatherCenter e cópia do INMET)
 async function dadosColetor() {
   // O endereço muda a cada 2 min para não pegar uma cópia velha guardada no caminho
   const url = `${API.coletor}?v=${Math.floor(Date.now() / 120000)}`;

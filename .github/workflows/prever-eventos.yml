@@ -1,0 +1,95 @@
+# Previsão de eventos adversos do WeatherCenter para as próximas 48 h (chuva, vento,
+# tempestade e tornado), pelo consenso dos modelos GFS (NOAA) e IFS (ECMWF).
+# Verifica a cada 30 min se saiu rodada nova dos modelos (cada um tem 4 por dia) e, se
+# saiu, recalcula. O resultado vai para o ramo "dados-modelos" e o coletor (a cada 5 min)
+# junta esses alertas aos de raios, radar e aeroportos.
+name: Prever eventos
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      forcar:
+        description: 'Recalcular mesmo sem rodada nova'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'detector/**'
+      - '.github/workflows/prever-eventos.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prever-eventos-${{ github.event_name == 'pull_request' && github.ref || 'principal' }}
+  cancel-in-progress: false
+
+jobs:
+  prever:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            detector
+            dados
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: detector/requirements.txt
+
+      - name: Instalar bibliotecas
+        run: pip install --quiet -r detector/requirements.txt
+
+      - name: Pegar a previsão anterior
+        run: |
+          mkdir -p anterior
+          if git fetch -q --depth=1 origin dados-modelos; then
+            for f in modelo.json ambiente.npz; do git show "FETCH_HEAD:$f" > "anterior/$f" 2>/dev/null || rm -f "anterior/$f"; done
+          fi
+
+      - name: Calcular a previsão
+        run: python3 detector/detectar.py modelos saida anterior
+        env:
+          DETECTOR_FORCAR: ${{ (github.event_name == 'pull_request' || inputs.forcar) && '1' || '0' }}
+
+      - name: Testar com casos reais (só em PR)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          echo '## Tornado de Rio Bonito do Iguaçu (PR), 07/11/2025, previsão feita às 12h de Brasília'
+          python3 detector/testes/caso_modelos.py 2025-11-07T15:00Z -25.49 -52.53
+
+      - name: Resumo
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          try:
+              d = json.load(open('saida/modelo.json'))
+          except Exception as e:
+              print(f'Sem previsão: {e}'); raise SystemExit
+          print(f"### {len(d['alertas'])} alertas de previsão ({d['gerado_em']})\n")
+          print('Rodadas: ' + ', '.join(f'{m.upper()} {r}' for m, r in d.get('rodadas', {}).items()) + '\n')
+          for a in d['alertas'][:40]:
+              print(f"- **{a['severidade']}** {a['titulo']} ({a['inicio'][5:16]} a {a['fim'][5:16]} UTC)")
+          PY
+
+      - name: Publicar no ramo "dados-modelos"
+        if: github.event_name != 'pull_request'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd saida
+          git init -q -b dados-modelos
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add modelo.json
+          [ -f ambiente.npz ] && git add ambiente.npz
+          git commit -q -m "Previsão de $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dados-modelos

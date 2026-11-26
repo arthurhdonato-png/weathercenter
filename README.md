@@ -13,6 +13,7 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 - **Quadros**: chuva nas próximas 3 horas, sensação, UV, vento, chuva do dia, sol, umidade, visibilidade, pressão, qualidade do ar e lua.
 - **Mapas**: mapa de fundo com ruas, limites de estados e municípios e nomes em português; camadas suaves de temperatura, chuva, vento (partículas animadas), nuvens, sensação, umidade, UV, pressão e visibilidade, animação contínua das próximas 24 h e radar de chuva animado (últimos 80 min).
 - **Alertas**: mapa do Brasil com todos os avisos ativos nas cores originais, lista filtrável por estado e situação de cada fonte.
+- **Alertas próprios do WeatherCenter** (automáticos, não oficiais): tempestades detectadas por raios de satélite e radar com trajetória e horário de chegada nas cidades, vento/granizo/tornado observados em aeroportos e previsão de 48 h de chuva, vento, temporais e ambiente para tornado pelo consenso GFS + ECMWF. Classificados como moderado, severo ou extremo, nas mesmas cores do INMET. Critérios e limitações em [`detector/CRITERIOS.md`](detector/CRITERIOS.md).
 
 ## Fontes de dados (gratuitas, sem chave)
 | Dado | Fonte |
@@ -21,6 +22,7 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 | Mapas, qualidade do ar | Open-Meteo |
 | Alertas (ao vivo no navegador) | INMET (`apiprevmet3.inmet.gov.br/avisos/ativos`) |
 | Alertas (pelo coletor automático) | Defesa Civil/IDAP (CAP) e Marinha/CHM (avisos de mau tempo) |
+| Alertas próprios (WeatherCenter) | Raios do satélite GOES-19 (GLM), radar RainViewer, METAR dos aeroportos, modelos GFS (NOAA) e IFS (ECMWF) |
 | Municípios e contornos | IBGE (API de localidades e de malhas) |
 | Nome da cidade pela localização | BigDataCloud (reverse geocode client) |
 | Radar | RainViewer |
@@ -38,6 +40,12 @@ Algumas fontes não podem ser lidas direto pelo navegador. O arquivo `coletor/co
 - Para rodar na mão: aba **Actions** > **Coletar alertas** > **Run workflow**.
 - Para testar no computador: `python3 coletor/coletar.py saida` e veja `saida/alertas.json`.
 - Para incluir uma fonte nova: escreva uma função `fonte_xxx()` em `coletar.py` que devolva a lista de alertas no formato comum e coloque-a na lista `FONTES`.
+
+## Detector WeatherCenter (alertas próprios)
+Código em `detector/` (Python com numpy, scipy, eccodes, netCDF4 e pillow, instalados pelo GitHub Actions).
+- **A cada ~5 min**, junto com o coletor: raios, radar e aeroportos (`python3 detector/detectar.py agora saida anterior`). Os alertas entram no mesmo `alertas.json` com `fonteId: "weathercenter"` e também em `weathercenter.json` (com as tempestades acompanhadas). Para não depender do agendamento do GitHub, que atrasa ou pula execuções, cada coleta dispara a seguinte; para desligar, crie a variável `ENCADEAR` com valor `nao` em Settings > Secrets and variables > Actions > Variables.
+- **A cada 30 min** (workflow **Prever eventos**): verifica se saiu rodada nova do GFS ou do ECMWF e recalcula a previsão de 48 h, publicada no ramo `dados-modelos`.
+- Testes com casos reais: `detector/testes/` (resultados em `detector/testes/RESULTADOS.md`).
 
 ## Estrutura
 Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL).

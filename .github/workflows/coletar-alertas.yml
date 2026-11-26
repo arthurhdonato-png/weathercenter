@@ -1,6 +1,7 @@
 # Coleta os alertas das fontes sem acesso direto pelo navegador (Defesa Civil/IDAP,
-# Marinha) e os focos de incêndio do INPE, e publica no ramo "dados"
-# (alertas.json, focos.json e a cópia inmet.json).
+# Marinha) e os focos de incêndio do INPE, roda o detector próprio do WeatherCenter
+# (raios por satélite, radar e aeroportos + previsão já calculada) e publica no ramo
+# "dados" (alertas.json, weathercenter.json, focos.json e a cópia inmet.json).
 # O app lê: https://raw.githubusercontent.com/<dono>/<repo>/dados/alertas.json
 #
 # Limites do GitHub Actions:
@@ -9,7 +10,7 @@
 # - O agendamento só funciona a partir do ramo principal (main).
 # - Em repositórios sem atividade por 60 dias o GitHub desliga o agendamento;
 #   basta reativar em Actions > Coletar alertas > Enable workflow.
-name: Coletar alertas 
+name: Coletar alertas
 
 on:
   schedule:
@@ -18,10 +19,12 @@ on:
   pull_request:
     paths:
       - 'coletor/**'
+      - 'detector/**'
       - '.github/workflows/coletar-alertas.yml'
 
 permissions:
   contents: write
+  actions: write   # para a execução seguinte ser disparada pela anterior (ver o último passo)
 
 concurrency:
   group: coletar-alertas-${{ github.event_name == 'pull_request' && github.ref || 'principal' }}
@@ -30,23 +33,54 @@ concurrency:
 jobs:
   coletar:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
+      - name: Marcar o início
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: coletor
+          sparse-checkout: |
+            coletor
+            detector
+            dados
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: detector/requirements.txt
+
+      - name: Instalar bibliotecas do detector
+        run: pip install --quiet -r detector/requirements.txt
 
       - name: Pegar a coleta anterior de incêndios
         # Os focos são somados aos poucos: só os arquivos novos do INPE são lidos a cada vez
         run: |
           mkdir -p anterior
           git fetch -q --depth=1 origin dados && git show FETCH_HEAD:focos.json > anterior/focos.json || rm -f anterior/focos.json
+          # Estado do detector (raios dos últimos 40 min, tempestades acompanhadas, ecos fixos do radar)
+          for f in estado-detector.json.gz radar-persistencia.npz; do
+            git show "FETCH_HEAD:$f" > "anterior/$f" 2>/dev/null || rm -f "anterior/$f"
+          done
+          # Previsão calculada pelo workflow "Prever eventos" (ramo dados-modelos)
+          if git fetch -q --depth=1 origin dados-modelos; then
+            for f in modelo.json ambiente.npz; do git show "FETCH_HEAD:$f" > "anterior/$f" 2>/dev/null || rm -f "anterior/$f"; done
+          fi
 
       - name: Buscar alertas
         run: python3 coletor/coletar.py saida
         env:
           # Nos testes de PR, mostra detalhes no log
           COLETOR_DEBUG: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+
+      - name: Detector WeatherCenter (raios, radar, aeroportos e previsão)
+        # Se o detector falhar, os alertas oficiais são publicados mesmo assim
+        continue-on-error: true
+        timeout-minutes: 6
+        run: python3 detector/detectar.py agora saida anterior
+        env:
+          DETECTOR_DEBUG: ${{ github.event_name == 'pull_request' && '1' || '0' }}
 
       - name: Resumo
         if: always()
@@ -61,6 +95,16 @@ jobs:
           print('| Fonte | Situação | Alertas |\n|---|---|---|')
           for f in d['fontes'].values():
               print(f"| {f['nome']} | {'ok' if f['ok'] else 'erro: ' + f.get('erro', '')} | {f.get('quantidade', '')} |")
+          try:
+              w = json.load(open('saida/weathercenter.json'))
+          except Exception:
+              raise SystemExit
+          print(f"\n### WeatherCenter: {len(w['alertas'])} alertas próprios\n")
+          print('| Parte | Situação | Alertas |\n|---|---|---|')
+          for f in w['fontes'].values():
+              print(f"| {f['nome']} | {'ok' if f['ok'] else 'erro: ' + f.get('erro', '')} | {f.get('quantidade', '')} |")
+          for a in w['alertas'][:15]:
+              print(f"- **{a['severidade']}** ({a['metodo']}) {a['titulo']}")
           EOF
 
       - name: Publicar no ramo "dados"
@@ -73,7 +117,21 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add alertas.json
-          for f in inmet.json focos.json; do [ -f "$f" ] && git add "$f"; done
+          for f in inmet.json focos.json weathercenter.json estado-detector.json.gz radar-persistencia.npz; do [ -f "$f" ] && git add "$f"; done
           git commit -q -m "Alertas de $(date -u +%Y-%m-%dT%H:%MZ)"
           # O ramo "dados" guarda só a última coleta (sem histórico acumulado)
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" dados
+
+      - name: Agendar a próxima coleta
+        # O agendamento do GitHub (cron) atrasa ou pula execuções. Para manter os alertas
+        # atualizados, cada coleta dispara a seguinte cerca de 5 minutos depois de começar.
+        # Só existe uma fila (concurrency): execuções a mais são descartadas sozinhas.
+        # Para desligar: Settings > Secrets and variables > Actions > Variables > ENCADEAR = nao
+        if: always() && github.event_name != 'pull_request' && vars.ENCADEAR != 'nao'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          passou=$(( $(date +%s) - INICIO ))
+          espera=$(( 270 - passou ))
+          if [ "$espera" -gt 0 ]; then sleep "$espera"; fi
+          gh workflow run coletar-alertas.yml --ref main -R "$GITHUB_REPOSITORY" || echo 'Não foi possível agendar (o cron segue valendo)'

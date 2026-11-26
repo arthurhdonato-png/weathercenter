@@ -355,6 +355,18 @@ RISCOS = {
 }
 
 
+def _periodo(inicio, agora):
+    """"hoje à tarde", "amanhã de madrugada"... (horário de Brasília)."""
+    from comum import BRT
+    a, h = inicio.astimezone(BRT), agora.astimezone(BRT)
+    dia = 'hoje' if a.date() == h.date() else 'amanhã' if (a.date() - h.date()).days == 1 else \
+        ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'][a.weekday()]
+    parte = 'de madrugada' if a.hour < 6 else 'de manhã' if a.hour < 12 else 'à tarde' if a.hour < 18 else 'à noite'
+    if dia == 'hoje' and a <= h + timedelta(minutes=30):
+        return 'a partir de agora'
+    return f'{dia} {parte}'
+
+
 def _texto_janela(inicio, fim):
     from comum import BRT
     dias = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom']
@@ -433,11 +445,12 @@ def areas_para_alertas(niveis, indices, tempos, municipios, agora, modelos_usado
                 ident = f"prev-{tipo}-{nivel}-{inicio:%Y%m%d%H}-{int(LATS[np.nonzero(proj)[0].mean().astype(int)] * 10)}{int(LONS[np.nonzero(proj)[1].mean().astype(int)] * 10)}"
                 alertas.append(alerta(
                     ident=ident, tipo=tipo, metodo='previsao', nivel=nivel,
-                    titulo=f'{TITULOS[tipo]} – {area_txt.split(" (")[0]}',
+                    titulo=f'{TITULOS[tipo]} – {area_txt.split(" (")[0]} ({_periodo(inicio, agora)})',
                     evento=TITULOS[tipo], inicio=inicio, fim=fim, riscos=riscos,
                     instrucoes=INSTRUCOES['tornado' if tipo == 'tornado' else tipo], municipios=municipios, idx_mun=list(idx),
                     poligonos=aneis, confianca=conf,
-                    detalhes={'modelos': modelos_usados, 'rodadas': rodadas, 'nivelTexto': NOME_NIVEL[nivel]},
+                    detalhes={'modelos': modelos_usados, 'rodadas': rodadas, 'nivelTexto': NOME_NIVEL[nivel],
+                              'tituloBase': f'{TITULOS[tipo]} – {area_txt.split(" (")[0]}', 'inicioEvento': iso(inicio)},
                 ))
     return alertas
 
@@ -491,9 +504,11 @@ def _filtrar(alertas, ref):
         fim = datetime.fromisoformat(a['fim'].replace('Z', '+00:00'))
         if fim < ref:
             continue
-        ini = datetime.fromisoformat(a['inicio'].replace('Z', '+00:00'))
-        if ini < ref:
-            a = {**a, 'inicio': iso(ref)}
+        d = a.get('detalhes', {})
+        ini = datetime.fromisoformat(d.get('inicioEvento', a['inicio']).replace('Z', '+00:00'))
+        a = {**a, 'inicio': iso(max(ini, ref))}
+        if d.get('tituloBase'):
+            a['titulo'] = f"{d['tituloBase']} ({_periodo(ini, ref)})"
         out.append(a)
     return out
 
