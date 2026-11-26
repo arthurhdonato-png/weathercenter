@@ -257,11 +257,11 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     if len(titulo) > 140:
         titulo = (txt(info, 'event') or titulo[:137] + '…')
     partes = [x for x in descricao.split('\n') if x.strip()]
-    if len(partes) > 1 and re.match(r'defesa civil\s*:', sem_acento(partes[0])):
+    if len(partes) > 1 and re.match(r'defesa\W*civil\W*:', sem_acento(partes[0])):
         descricao = '\n'.join(partes[1:])  # a 1ª linha costuma ser a versão SMS (sem acentos) do mesmo texto
     riscos = linhas(descricao) if descricao and descricao.strip() != headline.strip() else []
     if len(riscos) > 1:
-        riscos = [r for r in riscos if not re.match(r'defesa civil\s*:', sem_acento(r))] or riscos
+        riscos = [r for r in riscos if not re.match(r'defesa\W*civil\W*:', sem_acento(r))] or riscos
     if headline and len(headline) > 140:
         riscos.insert(0, headline)
     if titulo.isupper():
