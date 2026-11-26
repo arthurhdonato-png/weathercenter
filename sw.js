@@ -1,7 +1,7 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v4';
-const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/main.js', 'js/util.js', 'js/dados.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js',
+const VERSAO = 'wc-v5';
+const APP = ['./', 'index.html', 'styles.css', 'visual.css', 'manifest.webmanifest',
+  'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/mapas.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -27,7 +27,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   // Previsão e alertas: rede primeiro; sem internet, a última resposta salva
-  if (/open-meteo\.com$|inmet\.gov\.br$|raw\.githubusercontent\.com$/.test(url.hostname)) { e.respondWith(redePrimeiro(req, `${VERSAO}-dados`)); return; }
+  if (/open-meteo\.com$|api\.met\.no$|inmet\.gov\.br$|raw\.githubusercontent\.com$/.test(url.hostname)) { e.respondWith(redePrimeiro(req, `${VERSAO}-dados`)); return; }
   // Arquivos do app: rede primeiro (sempre a versão mais nova), cache quando offline
   if (url.origin === location.origin) e.respondWith(redePrimeiro(req, VERSAO));
 });

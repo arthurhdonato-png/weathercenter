@@ -4,7 +4,7 @@ import {
   carregarMunicipios, buscarLocal, buscarOpenMeteo, coordenadas, previsao, qualidadeAr,
   todosAlertas, alertaAfetaCidade, posicaoAtual, cidadeDaPosicao, municipioPorId,
 } from './dados.js';
-import { renderAgora, renderChuvaProxima, renderWidgets, render24h, render7dias, renderAlertasCidade } from './previsao.js';
+import { renderAgora, renderChuvaProxima, renderWidgets, renderHoras, renderDias, renderFontes, renderAlertasCidade } from './previsao.js';
 import { iniciarMapas } from './mapas.js';
 import { iniciarAlertasMapa } from './alertasMapa.js';
 
@@ -17,22 +17,47 @@ function setStatus(msg, erro = false) {
 
 /* ======================= Navegação por abas ======================= */
 const ABAS = ['previsao', 'mapas', 'alertas'];
+let abaAtual = null;
+const rolagemDaAba = {}; // cada aba lembra onde a pessoa parou de rolar
 function mostrarAba(aba) {
   if (!ABAS.includes(aba)) aba = 'previsao';
+  if (aba === abaAtual) return;
+  if (abaAtual) rolagemDaAba[abaAtual] = window.scrollY;
+  abaAtual = aba;
   for (const a of ABAS) {
     $(`aba-${a}`).hidden = a !== aba;
-    document.querySelectorAll(`[data-aba="${a}"]`).forEach((b) => b.setAttribute('aria-current', a === aba ? 'page' : 'false'));
+    document.querySelectorAll(`a[data-aba="${a}"]`).forEach((b) => b.setAttribute('aria-current', a === aba ? 'page' : 'false'));
   }
   document.body.dataset.aba = aba;
+  window.scrollTo({ top: rolagemDaAba[aba] || 0 });
   if (aba === 'mapas') requestAnimationFrame(() => iniciarMapas(abrirPonto));
   if (aba === 'alertas') requestAnimationFrame(() => iniciarAlertasMapa());
 }
-window.addEventListener('hashchange', () => mostrarAba(location.hash.slice(1)));
-document.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', (e) => {
+window.addEventListener('hashchange', () => {
+  // Só reage a endereços das abas (#previsao, #mapas, #alertas); qualquer outro "#" é ignorado
+  const aba = location.hash.slice(1);
+  if (ABAS.includes(aba)) mostrarAba(aba);
+});
+// Atenção: só os LINKS das abas. O <body> também tem data-aba, e escutar cliques nele fazia
+// qualquer clique na página voltar para o topo (e impedia abrir os dias da previsão).
+document.querySelectorAll('a[data-aba]').forEach((b) => b.addEventListener('click', (e) => {
   e.preventDefault();
   history.replaceState(null, '', `${location.search}#${b.dataset.aba}`);
   mostrarAba(b.dataset.aba);
-  window.scrollTo({ top: 0 });
+}));
+
+// Botões que levam a um cartão da própria página (ex.: "Consenso de N fontes")
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ir]');
+  if (!b) return;
+  const alvo = $(b.dataset.ir);
+  if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Setas da previsão por hora (no computador, onde não há deslizar com o dedo)
+document.querySelectorAll('[data-rolar]').forEach((b) => b.addEventListener('click', () => {
+  const faixa = $('horas');
+  faixa.scrollBy({ left: Number(b.dataset.rolar) * faixa.clientWidth * 0.8, behavior: 'smooth' });
 }));
 
 /* ======================= Abrir uma cidade ======================= */
@@ -46,18 +71,20 @@ function alertasCompartilhados() {
   return alertasPromessa;
 }
 
-async function abrirCidade(cidade) {
+let cidadeAtual = null;
+// trocarAba: false quando o app abre com #mapas ou #alertas no endereço (fica nessa aba)
+async function abrirCidade(cidade, { trocarAba = true } = {}) {
   const meu = ++pedido;
   fecharSugestoes();
   $('campo-busca').value = '';
   $('campo-busca').blur();
-  mostrarAba('previsao');
+  if (trocarAba) mostrarAba('previsao');
   setStatus(`Carregando o tempo em ${cidade.nome}…`);
   document.body.classList.add('carregando');
   try {
     const c = await coordenadas(cidade);
     const [prev, ar, alertas] = await Promise.all([
-      previsao(c.lat, c.lon),
+      previsao(c.lat, c.lon, c.id),
       qualidadeAr(c.lat, c.lon).catch(() => null),
       alertasCompartilhados(),
     ]);
@@ -66,9 +93,14 @@ async function abrirCidade(cidade) {
     renderAlertasCidade(alertas, c, alertaAfetaCidade);
     renderChuvaProxima(prev);
     renderWidgets(prev, ar);
-    render24h(prev);
-    render7dias(prev);
+    renderHoras(prev);
+    renderDias(prev);
+    renderFontes(prev);
     $('painel').hidden = false;
+    // Cidade nova: começa do topo. Mesma cidade (atualização): a página fica onde está.
+    const chaveCidade = c.id || `${c.nome}|${c.uf}|${c.local ? 'local' : ''}`;
+    if (cidadeAtual !== chaveCidade && abaAtual === 'previsao') window.scrollTo({ top: 0 });
+    cidadeAtual = chaveCidade;
     $('boas-vindas').hidden = true;
     setStatus('');
     salvarRecente(c);
@@ -94,21 +126,21 @@ async function abrirPonto(lat, lon) {
   abrirCidade(c);
 }
 
-async function usarLocalizacao() {
+async function usarLocalizacao(opcoes) {
   setStatus('Obtendo sua localização…');
   try {
     const { lat, lon } = await posicaoAtual();
     store.set('wc:usarLocal', true);
     const c = await cidadeDaPosicao(lat, lon);
     if (c.foraDoBrasil) setStatus('Você parece estar fora do Brasil. Mostrando a previsão mesmo assim.');
-    abrirCidade(c);
+    abrirCidade(c, opcoes);
   } catch (e) {
     store.set('wc:usarLocal', false);
     setStatus(e.message, true);
   }
 }
-$('btn-local').addEventListener('click', usarLocalizacao);
-$('btn-local-boas').addEventListener('click', usarLocalizacao);
+$('btn-local').addEventListener('click', () => usarLocalizacao());
+$('btn-local-boas').addEventListener('click', () => usarLocalizacao());
 
 /* ======================= Recentes ======================= */
 function salvarRecente(c) {
@@ -197,6 +229,7 @@ async function permissaoLocal() {
   try { return (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { return 'prompt'; }
 }
 
+const INICIO = { trocarAba: false };
 (async function iniciar() {
   renderRecentes();
   mostrarAba(location.hash.slice(1));
@@ -208,20 +241,20 @@ async function permissaoLocal() {
       if (/^\d{7}$/.test(param)) {
         await carregarMunicipios();
         const c = municipioPorId(param);
-        if (c) return abrirCidade(c);
+        if (c) return abrirCidade(c, INICIO);
       } else if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(param)) {
         const [lat, lon] = param.split(',').map(Number);
-        return abrirCidade(await cidadeDaPosicao(lat, lon));
+        return abrirCidade(await cidadeDaPosicao(lat, lon), INICIO);
       } else {
         const [nome, uf] = param.split('|');
-        return abrirCidade({ id: null, nome, uf: uf || '' });
+        return abrirCidade({ id: null, nome, uf: uf || '' }, INICIO);
       }
     } catch { /* segue */ }
   }
   const ultima = store.get('wc:ultima');
   const usarLocal = store.get('wc:usarLocal');
   // Abre na localização atual quando a pessoa já permitiu antes
-  if (usarLocal !== false && (await permissaoLocal()) === 'granted') return usarLocalizacao();
-  if (ultima && !ultima.local) return abrirCidade(ultima);
-  if (ultima?.local && usarLocal) return usarLocalizacao();
+  if (usarLocal !== false && (await permissaoLocal()) === 'granted') return usarLocalizacao(INICIO);
+  if (ultima && !ultima.local) return abrirCidade(ultima, INICIO);
+  if (ultima?.local && usarLocal) return usarLocalizacao(INICIO);
 })();
