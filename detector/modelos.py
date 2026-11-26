@@ -320,8 +320,12 @@ def ingredientes(c, modelo):
     indices = {'p3': p3, 'p24': p24, 'p48': p48, 'gust': gust, 'cape_mu': cape_mu, 'cape_sb': cape_sb, 'shear': shear,
                'srh': srh, 'scp': scp, 'stp': stp, 'lcl': lcl, 'granizo': granizo}
     # Vento médio 850-500 hPa (deslocamento das tempestades), usado pelo nowcasting de raios
-    indices['passo_u'] = np.nanmean([c['u850'], c['u700'], c['u500']], axis=0)
-    indices['passo_v'] = np.nanmean([c['v850'], c['v700'], c['v500']], axis=0)
+    with np.errstate(all='ignore'):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)   # horário sem dado (falha de download)
+            indices['passo_u'] = np.nan_to_num(np.nanmean([c['u850'], c['u700'], c['u500']], axis=0))
+            indices['passo_v'] = np.nan_to_num(np.nanmean([c['v850'], c['v700'], c['v500']], axis=0))
     return {k: v.astype(np.uint8) for k, v in n.items()}, indices
 
 

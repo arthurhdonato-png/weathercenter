@@ -20,7 +20,13 @@ Guarapuava (Entre Rios) e Turvo.
 Antecedência do alerta extremo: **~70 min**. No país inteiro, nesse período, houve de 3 a 8 alertas
 extremos ao mesmo tempo, quase todos no oeste do PR e de SC (onde houve os tornados e muitos vendavais).
 
-**Previsão** (`caso_modelos.py 2025-11-07T15:00Z -25.49 -52.53`, só GFS 06z): ao meio-dia, a cidade estava
+**Previsão com o consenso GFS 06z + ECMWF 00z** (rodado no GitHub Actions): ao meio-dia, a cidade estava em
+"condições favoráveis a tornado" (moderado, das 12h às 19h30) e havia três áreas **severas** de tornado no
+oeste de SC/PR (Frederico Westphalen e Itapiranga; Videira; Ipuaçu e Entre Rios) e temporais severos no oeste
+do PR. O ambiente no local, pelo ECMWF, era muito favorável: helicidade 373 m²/s², cisalhamento de 110 km/h,
+SCP 11,4 e STP 1,5.
+
+**Previsão só com o GFS 06z** (`caso_modelos.py 2025-11-07T15:00Z -25.49 -52.53`): ao meio-dia, a cidade estava
 em "condições favoráveis a tornado" (moderado) e havia áreas **severas** a oeste (Frederico Westphalen,
 Itapiranga) e em Ipuaçu/Entre Rios (SC) para 16h30-19h30. Ambiente no local: CAPE 417 J/kg, cisalhamento
 0-6 km de 110 km/h, helicidade 277 m²/s², SCP 3,2 — o típico ambiente de pouca instabilidade e muito
