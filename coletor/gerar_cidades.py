@@ -51,13 +51,13 @@ def main():
         cod = r['codigo_ibge']
         cidades.append([
             r['nome'], UF_POR_CODIGO.get(r['codigo_uf'], ''), round(float(r['latitude']), 3),
-            round(float(r['longitude']), 3), pop.get(cod, 0), int(r['capital'] == '1'),
+            round(float(r['longitude']), 3), pop.get(cod, 0), int(r['capital'] == '1'), int(cod),
         ])
     # Capitais primeiro, depois da maior para a menor população
     cidades.sort(key=lambda c: (-c[5], -c[4], c[0]))
     os.makedirs(os.path.dirname(destino) or '.', exist_ok=True)
     with open(destino, 'w', encoding='utf-8') as f:
-        json.dump({'campos': ['nome', 'uf', 'lat', 'lon', 'populacao', 'capital'],
+        json.dump({'campos': ['nome', 'uf', 'lat', 'lon', 'populacao', 'capital', 'ibge'],
                    'fontes': 'Coordenadas: kelvins/municipios-brasileiros (MIT). População: IBGE, Censo 2022.',
                    'cidades': cidades}, f, ensure_ascii=False, separators=(',', ':'))
     print(f'{destino}: {len(cidades)} cidades, {len(pop)} com população, {os.path.getsize(destino) // 1024} KB')
