@@ -9,7 +9,7 @@
 # - O agendamento só funciona a partir do ramo principal (main).
 # - Em repositórios sem atividade por 60 dias o GitHub desliga o agendamento;
 #   basta reativar em Actions > Coletar alertas > Enable workflow.
-name: Coletar alertas
+name: Coletar alertas 
 
 on:
   schedule:
