@@ -11,7 +11,7 @@ import { iniciarAlertasMapa, definirAlertas, filtrarUF } from './alertasMapa.js'
 import { definirCidadeNotificacao, iniciarNotificacoes } from './notificacoes.js';
 import { abrirGraficos, GRUPOS_GRAFICO } from './graficos.js';
 import { iniciarTema } from './tema.js';
-import { renderCena } from './cena.js';
+import { renderCena, atualizarAlertasCena } from './cena.js';
 
 iniciarTema();
 
@@ -120,7 +120,7 @@ async function abrirCidade(cidade, { manterPosicao = false } = {}) {
     if (meu !== pedido) return;
     aberto = { prev, ar, cidade: c };
     renderAgora(prev, c);
-    renderCena(prev, c);
+    renderCena(prev, c, alertas?.alertas || []);
     const alertasDaCidade = renderAlertasCidade(alertas, c, alertaAfetaCidade);
     renderResumo(prev, alertasDaCidade);
     renderChuvaProxima(prev);
@@ -202,6 +202,7 @@ async function atualizarAlertas() {
   if (aberto) {
     const daCidade = renderAlertasCidade(r, aberto.cidade, alertaAfetaCidade);
     renderResumo(aberto.prev, daCidade);
+    atualizarAlertasCena(r.alertas || []);
   }
 }
 setInterval(atualizarAlertas, 5 * 60 * 1000);

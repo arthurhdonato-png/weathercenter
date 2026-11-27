@@ -849,7 +849,6 @@ body.carregando .painel .cartao {
   background: linear-gradient(180deg, color-mix(in srgb, var(--chuva) 10%, var(--superficie)), var(--superficie) 85%); }
 .cena-svg.noite { background: linear-gradient(180deg, color-mix(in srgb, var(--acento-2) 18%, var(--superficie)), var(--superficie) 85%); }
 .cena-svg.chovendo { background: linear-gradient(180deg, color-mix(in srgb, var(--g-nuvem-baixa) 22%, var(--superficie)), var(--superficie) 85%); }
-.cena-texto { font-size: .92rem; }
 .cn-chao { stroke: var(--borda-forte); stroke-width: 2; }
 .cn-casa .cn-telhado { fill: none; stroke: var(--texto); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
 .cn-casa .cn-parede { fill: var(--superficie); stroke: var(--texto); stroke-width: 2.5; }
@@ -871,13 +870,36 @@ body.carregando .painel .cartao {
 .cn-nuvem.deriva { animation: cn-deriva 9s ease-in-out infinite alternate; }
 .cn-nuvem.deriva.lenta { animation-duration: 13s; animation-direction: alternate-reverse; }
 @keyframes cn-deriva { from { translate: -10px 0; } to { translate: 12px 0; } }
-.cn-gota { stroke: var(--chuva); stroke-width: 2.2; stroke-linecap: round; animation: cn-cair .9s linear infinite; }
-.cn-chuva.forte .cn-gota { stroke-width: 2.6; animation-duration: .6s; }
+.cn-gota { stroke: var(--chuva); stroke-width: var(--larg, 2.2); stroke-linecap: round; animation: cn-cair var(--dur, .9s) linear infinite; }
 @keyframes cn-cair { from { transform: translate(0, 0); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } to { transform: translate(-6px, 56px); opacity: 0; } }
+.cn-nuvem.tempestade path { fill: color-mix(in srgb, #3b4250 75%, var(--superficie)); stroke: #2b313c; }
+.cn-chegando.vem-esq { animation: cn-vem-esq 3.2s ease-in-out infinite alternate; }
+.cn-chegando.vem-dir { animation: cn-vem-dir 3.2s ease-in-out infinite alternate; }
+@keyframes cn-vem-esq { from { translate: 0 0; } to { translate: -14px 0; } }
+@keyframes cn-vem-dir { from { translate: 0 0; } to { translate: 14px 0; } }
+.cn-chegando.prevista { opacity: .7; }
+.cn-vento-linha { fill: none; stroke: var(--g-vento); stroke-width: 2.2; stroke-linecap: round; opacity: 0; animation: cn-soprar 1.6s ease-in-out infinite; }
+.cn-vento.forte .cn-vento-linha { stroke-width: 2.8; animation-duration: 1.1s; }
+.cn-vento.p-esq .cn-vento-linha { animation-name: cn-soprar-esq; }
+@keyframes cn-soprar { 0% { transform: translateX(-24px); opacity: 0; } 30%, 70% { opacity: .9; } 100% { transform: translateX(30px); opacity: 0; } }
+@keyframes cn-soprar-esq { 0% { transform: translateX(24px); opacity: 0; } 30%, 70% { opacity: .9; } 100% { transform: translateX(-30px); opacity: 0; } }
+.cn-dist.chegando { animation: cn-tracejar-in 1.2s linear infinite; }
+.cn-dist.chegando.de-dir { animation-name: cn-tracejar; }
+@keyframes cn-tracejar-in { to { stroke-dashoffset: 16; } }
+.cena-itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .9rem; }
+.cena-itens li { padding-left: 18px; position: relative; }
+.cena-itens li::before { content: ""; position: absolute; left: 3px; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: var(--fraco); }
+.cena-itens .ci-chuva::before { background: var(--chuva); }
+.cena-itens .ci-temporal::before { background: #8E24AA; }
+.cena-itens .ci-vento::before { background: var(--g-vento); }
+.cena-itens .ci-ok::before { background: var(--ok); }
+.cena-itens .ci-agora::before { background: var(--acento); }
 .cn-raio { fill: var(--sol); opacity: 0; animation: cn-relampago 4s infinite; }
 @keyframes cn-relampago { 0%, 60%, 66%, 100% { opacity: 0; } 62%, 64% { opacity: 1; } 63% { opacity: .3; } }
 .cn-neblina line { stroke: var(--fraco); stroke-width: 5; stroke-linecap: round; opacity: .55; animation: cn-deriva 7s ease-in-out infinite alternate; }
-.cn-dist { stroke: var(--sutil); stroke-width: 1.5; stroke-dasharray: 4 4; animation: cn-tracejar 1.2s linear infinite; }
+.cn-dist { stroke: var(--sutil); stroke-width: 1.5; stroke-dasharray: 4 4; }
 @keyframes cn-tracejar { to { stroke-dashoffset: -16; } }
 .cn-seta { fill: var(--sutil); }
 .cn-km { font-size: 13px; font-weight: 700; fill: var(--texto); text-anchor: middle; font-family: var(--fonte); }
+:root[data-tema="escuro"] .cn-nuvem.tempestade path { fill: #4a5363; stroke: #8a94a3; }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .cn-nuvem.tempestade path { fill: #4a5363; stroke: #8a94a3; } }

@@ -1,5 +1,5 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v12';
+const VERSAO = 'wc-v13';
 const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/icones.js',
   'js/mapas.js', 'js/mapaBase.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js', 'js/notificacoes.js',
@@ -20,7 +20,10 @@ self.addEventListener('activate', (e) => {
 });
 
 function redePrimeiro(req, cacheNome) {
-  return fetch(req).then((r) => {
+  // Arquivos do app: confere com o servidor (sem usar a cópia de até 10 min do navegador), para nunca
+  // misturar um index.html novo com scripts antigos logo depois de uma atualização
+  const pedido = cacheNome !== VERSAO ? fetch(req) : req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache' }) : fetch(req, { cache: 'no-cache' });
+  return pedido.then((r) => {
     if (r.ok) { const copia = r.clone(); caches.open(cacheNome).then((c) => c.put(req, copia)); }
     return r;
   }).catch(() => caches.match(req, { ignoreSearch: cacheNome === VERSAO }).then((r) => r || Promise.reject(new Error('offline'))));
