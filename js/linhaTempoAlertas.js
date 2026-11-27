@@ -1,4 +1,4 @@
-// Linha do tempo dos alertas: uma barra horizontal por alerta, do início ao fim da validade,
+// Linha do tempo dos alertas da cidade nas próximas 72 horas: uma barra horizontal por alerta, do início ao fim,
 // na cor da severidade, com o tipo do evento e a fonte. Alertas que valem nas mesmas horas
 // ficam em linhas diferentes (um acima do outro), nunca sobrepostos.
 import { esc } from './util.js';
@@ -28,13 +28,11 @@ function tipoEvento(a) {
 
 const fmtHora = (d) => d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace('.', '');
 
-// Janela de tempo: da hora atual até o fim do último alerta (entre 24 horas e 7 dias)
-function janela(alertas, agora) {
+// Janela de tempo fixa: as próximas 72 horas, a partir da hora atual
+const JANELA_HORAS = 72;
+function janela(agora) {
   const ini = Math.floor(agora / HORA) * HORA;
-  let fim = ini + 24 * HORA;
-  for (const a of alertas) if (a.fim && +a.fim > fim) fim = +a.fim;
-  fim = Math.min(fim, ini + 7 * 24 * HORA);
-  return { ini, fim: Math.ceil(fim / HORA) * HORA };
+  return { ini, fim: ini + JANELA_HORAS * HORA };
 }
 
 // Distribui as barras em linhas: cada alerta vai para a primeira linha livre naquele intervalo
@@ -66,12 +64,13 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
     el.__ltObs.observe(el);
   }
   const agora = Date.now();
-  const validos = alertas.filter((a) => !a.fim || +a.fim > agora);
+  const { ini, fim } = janela(agora);
+  // Só o que vale em algum momento das próximas 72 horas
+  const validos = alertas.filter((a) => (!a.fim || +a.fim > agora) && (!a.inicio || +a.inicio < fim));
   if (!validos.length) {
     el.innerHTML = `<div class="aviso-neutro ok">${esc(vazio)}</div>`;
     return;
   }
-  const { ini, fim } = janela(validos, agora);
   const horas = (fim - ini) / HORA;
   const disponivel = Math.max(280, el.clientWidth || 600);
   const px = Math.max(compacto ? 7 : 10, disponivel / horas);
@@ -99,11 +98,6 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
   }
   const primeiroDia = new Date(ini);
   if (primeiroDia.getHours() !== 0 && (24 - primeiroDia.getHours()) * px > 70) eixo += `<span class="lt-dia lt-dia-ini" style="left:0">${primeiroDia.getHours() < 20 ? 'Hoje' : DIAS_CURTOS[primeiroDia.getDay()]}</span>`;
-  let divisoes = '';
-  for (let t = Math.ceil(ini / HORA) * HORA; t <= fim; t += HORA) {
-    if (new Date(t).getHours() === 0) divisoes += `<i class="lt-meia-noite" style="left:${xDe(t)}px"></i>`;
-  }
-
   const barras = itens.map((it, i) => {
     const a = it.a;
     const evento = tipoEvento(a);
@@ -117,16 +111,15 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
 
   const altura = nLinhas * ALTURA_LINHA;
   el.innerHTML = `<div class="lt${compacto ? ' lt-compacto' : ''}">
-    <div class="lt-rolagem" tabindex="0" aria-label="Linha do tempo dos alertas (role para os lados para ver os próximos dias)">
+    <div class="lt-rolagem" tabindex="0" aria-label="Linha do tempo dos alertas nas próximas 72 horas (role para os lados)">
       <div class="lt-conteudo" style="width:${W}px;--px:${px}px">
         <div class="lt-eixo">${eixo}</div>
-        <div class="lt-faixas" style="height:${altura}px">${divisoes}${barras}
+        <div class="lt-faixas" style="height:${altura}px">${barras}
           <i class="lt-agora" style="left:${xDe(agora).toFixed(1)}px" title="Agora"></i>
         </div>
       </div>
     </div>
-    <p class="lt-nota">${compacto ? 'Linha turquesa: agora · listrado: ainda vai começar. Toque numa barra para ver os detalhes.'
-      : `${itens.length} alerta${itens.length === 1 ? '' : 's'} em ${nLinhas} linha${nLinhas === 1 ? '' : 's'}. Linha turquesa: agora · ◂ já estava valendo · ▸ continua depois · listrado: ainda vai começar · contorno tracejado: automático do WeatherCenter. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.`}</p>
+    <p class="lt-nota">Próximas 72 horas · ${itens.length} alerta${itens.length === 1 ? '' : 's'}. Linha turquesa: agora · ◂ já estava valendo · ▸ continua depois das 72 h · mais claro: ainda vai começar${itens.some((it) => it.a.oficial === false) ? ' · contorno tracejado: automático do WeatherCenter' : ''}. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.</p>
   </div>`;
   el.querySelector('.lt-faixas').addEventListener('click', (e) => {
     const b = e.target.closest('.lt-barra');
