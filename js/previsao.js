@@ -468,7 +468,7 @@ function renderFaixaAlertas(daCidade, cidade, resultado) {
   const itens = daCidade.slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)};color:${corTextoSobre(a.cor)}" title="${esc(a.risco || '')}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
   el.innerHTML = `<div class="faixa-cab">${icone('alerta')}<h2>${plural(daCidade.length, 'alerta ativo', 'alertas ativos')} para ${esc(cidade.nome)}${oficiais ? '' : ' (automático do WeatherCenter)'}</h2></div>
     <ul>${itens}</ul>
-    <div class="faixa-linha-cab"><h3>Linha do tempo dos alertas de ${esc(cidade.nome)}</h3><span>quando cada um começa e termina, hora a hora</span></div>
+    <div class="faixa-linha-cab"><h3>Linha do tempo dos alertas de ${esc(cidade.nome)}</h3><span>próximas 72 horas, hora a hora</span></div>
     <div class="faixa-linha" id="faixa-linha-tempo"></div>
     <div class="faixa-acoes"><button type="button" class="btn-sec" data-ir="alertas-cidade">Ver detalhes e o que fazer</button>${cidade.uf ? `<button type="button" class="btn-sec" data-ver-uf="${esc(cidade.uf)}">Ver no mapa de alertas</button>` : ''}</div>`;
   renderLinhaTempo($('faixa-linha-tempo'), daCidade, {

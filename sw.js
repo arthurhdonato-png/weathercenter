@@ -1,9 +1,9 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v11';
+const VERSAO = 'wc-v12';
 const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/icones.js',
   'js/mapas.js', 'js/mapaBase.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js', 'js/notificacoes.js',
-  'js/mapaControles.js', 'js/linhaTempoAlertas.js', 'js/graficos.js', 'js/niveis.js', 'js/tema.js', 'vendor/polygon-clipping/polygon-clipping.umd.min.js',
+  'js/mapaControles.js', 'js/linhaTempoAlertas.js', 'js/graficos.js', 'js/niveis.js', 'js/tema.js', 'js/cena.js', 'vendor/polygon-clipping/polygon-clipping.umd.min.js',
   'dados/mascara-brasil.json', 'dados/contorno-brasil-largo.json', 'dados/contorno-ufs.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/fontes/noto-sans-latin-wght-normal.woff2',
   'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css', 'vendor/maplibre/leaflet-maplibre-gl.js',

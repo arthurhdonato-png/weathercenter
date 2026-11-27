@@ -615,9 +615,7 @@ body.com-mapa-cheio { overflow: hidden; }
 .lt-h { position: absolute; bottom: 3px; transform: translateX(-50%); font-size: .68rem; color: var(--sutil); font-weight: 600; }
 .lt-faixas {
   position: relative; min-height: 34px; margin: 6px 0 8px;
-  background-image: repeating-linear-gradient(90deg, color-mix(in srgb, var(--borda) 70%, transparent) 0 1px, transparent 1px var(--px));
 }
-.lt-meia-noite { position: absolute; top: -6px; bottom: -8px; width: 0; border-left: 2px solid var(--borda-forte); }
 .lt-agora { position: absolute; top: -6px; bottom: -8px; width: 0; border-left: 2px solid var(--acento); z-index: 2; pointer-events: none; }
 .lt-agora span { position: absolute; top: -1px; left: 3px; font-size: .62rem; font-weight: 700; color: var(--acento); text-transform: uppercase; letter-spacing: .05em; background: var(--superficie); padding: 0 2px; border-radius: 3px; }
 .lt-barra {
@@ -628,7 +626,7 @@ body.com-mapa-cheio { overflow: hidden; }
 .lt-barra:hover { filter: brightness(1.04) saturate(1.05); box-shadow: 0 2px 8px rgba(0, 0, 0, .2); z-index: 1; }
 .lt-barra[aria-pressed="true"] { outline: 2px solid var(--texto); outline-offset: 1px; z-index: 1; }
 .lt-barra.lt-auto { border: 2px dashed color-mix(in srgb, var(--cor) 55%, #000); background: color-mix(in srgb, var(--cor) 55%, var(--superficie)); color: var(--texto); }
-.lt-barra.lt-futuro { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .22) 0 6px, transparent 6px 12px); }
+.lt-barra.lt-futuro { background: color-mix(in srgb, var(--cor) 62%, var(--superficie)); }
 .lt-barra.lt-antes { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-width: 0; }
 .lt-barra.lt-antes::before, .lt-barra.lt-depois::after { position: absolute; font-size: .7rem; color: var(--sutil); top: 50%; transform: translateY(-50%); }
 .lt-barra.lt-antes::before { content: "◂"; left: -9px; }
@@ -844,3 +842,42 @@ body.carregando .painel .cartao {
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) .agora-temp, :root:not([data-tema="claro"]) .w-grande { text-shadow: 0 0 24px var(--brilho); }
 }
+
+/* ======================= Cena animada: a casa e o tempo de agora ======================= */
+.cena { grid-column: 1 / -1; display: grid; gap: 6px; overflow: hidden; }
+.cena-svg { width: 100%; height: clamp(150px, 17vw, 220px); display: block; border-radius: var(--raio-p);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--chuva) 10%, var(--superficie)), var(--superficie) 85%); }
+.cena-svg.noite { background: linear-gradient(180deg, color-mix(in srgb, var(--acento-2) 18%, var(--superficie)), var(--superficie) 85%); }
+.cena-svg.chovendo { background: linear-gradient(180deg, color-mix(in srgb, var(--g-nuvem-baixa) 22%, var(--superficie)), var(--superficie) 85%); }
+.cena-texto { font-size: .92rem; }
+.cn-chao { stroke: var(--borda-forte); stroke-width: 2; }
+.cn-casa .cn-telhado { fill: none; stroke: var(--texto); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.cn-casa .cn-parede { fill: var(--superficie); stroke: var(--texto); stroke-width: 2.5; }
+.cn-casa .cn-porta { fill: var(--acento); }
+.cn-casa .cn-janela { fill: color-mix(in srgb, var(--sol) 55%, var(--superficie)); stroke: var(--texto); stroke-width: 1.5; }
+.cena-svg.dia .cn-janela { fill: var(--superficie-2); }
+.cn-pino { fill: var(--acento); }
+.cn-pino-onda { fill: none; stroke: var(--acento); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: cn-onda 2.4s ease-out infinite; }
+@keyframes cn-onda { from { transform: scale(1); opacity: .9; } to { transform: scale(4.5); opacity: 0; } }
+.cn-sol circle { fill: var(--sol); }
+.cn-sol .cn-raios { stroke: var(--sol); stroke-width: 3; stroke-linecap: round; animation: cn-girar 24s linear infinite; }
+@keyframes cn-girar { to { transform: rotate(360deg); } }
+.cn-sol circle { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--sol) 60%, transparent)); }
+.cn-lua path { fill: color-mix(in srgb, var(--sol) 75%, var(--superficie)); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--sol) 40%, transparent)); }
+.cn-estrela { fill: var(--texto); opacity: .5; animation: cn-piscar 3s ease-in-out infinite; }
+@keyframes cn-piscar { 50% { opacity: .1; } }
+.cn-nuvem path { fill: color-mix(in srgb, var(--g-nuvem) 45%, var(--superficie)); stroke: var(--g-nuvem); stroke-width: 1.5; }
+.cn-nuvem.escura path { fill: color-mix(in srgb, var(--g-nuvem-baixa) 70%, var(--superficie)); stroke: var(--g-nuvem-baixa); }
+.cn-nuvem.deriva { animation: cn-deriva 9s ease-in-out infinite alternate; }
+.cn-nuvem.deriva.lenta { animation-duration: 13s; animation-direction: alternate-reverse; }
+@keyframes cn-deriva { from { translate: -10px 0; } to { translate: 12px 0; } }
+.cn-gota { stroke: var(--chuva); stroke-width: 2.2; stroke-linecap: round; animation: cn-cair .9s linear infinite; }
+.cn-chuva.forte .cn-gota { stroke-width: 2.6; animation-duration: .6s; }
+@keyframes cn-cair { from { transform: translate(0, 0); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } to { transform: translate(-6px, 56px); opacity: 0; } }
+.cn-raio { fill: var(--sol); opacity: 0; animation: cn-relampago 4s infinite; }
+@keyframes cn-relampago { 0%, 60%, 66%, 100% { opacity: 0; } 62%, 64% { opacity: 1; } 63% { opacity: .3; } }
+.cn-neblina line { stroke: var(--fraco); stroke-width: 5; stroke-linecap: round; opacity: .55; animation: cn-deriva 7s ease-in-out infinite alternate; }
+.cn-dist { stroke: var(--sutil); stroke-width: 1.5; stroke-dasharray: 4 4; animation: cn-tracejar 1.2s linear infinite; }
+@keyframes cn-tracejar { to { stroke-dashoffset: -16; } }
+.cn-seta { fill: var(--sutil); }
+.cn-km { font-size: 13px; font-weight: 700; fill: var(--texto); text-anchor: middle; font-family: var(--fonte); }
