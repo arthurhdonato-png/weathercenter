@@ -32,13 +32,28 @@ Itapiranga) e em Ipuaçu/Entre Rios (SC) para 16h30-19h30. Ambiente no local: CA
 0-6 km de 110 km/h, helicidade 277 m²/s², SCP 3,2 — o típico ambiente de pouca instabilidade e muito
 cisalhamento do Sul, que o critério extra "HSLC" foi feito para pegar.
 
-## 2. Ciclone extratropical e enxurrada de Caraá (RS), 15-16/06/2023
+## 2. Temporal com suspeita de tornado em Tupanciretã (RS), 20/11/2026
+
+Supercélula passou pela cidade por volta das **3h** (estragos entre 3h e 3h40; rajada de 114 km/h numa estação
+do INMET; milhares de casas danificadas). A Defesa Civil mandou alerta por SMS às 2h38.
+
+**Raios por satélite** (`COM_MODELOS=1 caso_raios.py 2026-11-20T04:00Z 2026-11-20T07:00Z -29.08 -53.84`):
+a linha de tempestades veio da Fronteira Oeste (Uruguaiana, Alegrete) desde 1h, já em extremo. Tupanciretã entrou
+em alerta **extremo ("tempestade muito severa": vendaval, granizo)** às **2h10**, com chegada estimada às 3h05,
+ou seja **~55 min antes** e 28 min antes do SMS oficial. Ambiente: cisalhamento de 139 km/h, CAPE 866 J/kg.
+O rótulo "risco de tornado" só apareceu às 3h40, numa segunda tempestade.
+
+**Previsão por modelos**: as rodadas do meio-dia e das 21h do dia 19 marcaram ambiente favorável (CAPE 1300-1700,
+cisalhamento ~100 km/h, SCP 2,6-3,5), mas **não** puseram a região em alerta para a madrugada (só temporais
+moderados para o dia 20). Os modelos não acertaram o horário noturno da linha.
+
+## 3. Ciclone extratropical e enxurrada de Caraá (RS), 15-16/06/2023
 
 `caso_modelos.py 2023-06-15T12:00Z -29.79 -50.43` (só GFS): na véspera, a região de Caraá e da Grande Porto
 Alegre ficou em **chuva extrema** para a noite de 15 e o dia 16 (41 municípios), com severo e moderado em
 volta, e vento moderado no litoral norte. Acertou o local e o período da enxurrada.
 
-## 3. Chuvas de maio de 2024 no RS
+## 4. Chuvas de maio de 2024 no RS
 
 `caso_modelos.py 2024-04-30T12:00Z -29.46 -51.96` (Lajeado, só GFS): a previsão marcou chuva **severa a
 extrema** no centro do RS e na Grande Porto Alegre para 1º e 2 de maio (Santa Maria, Porto Alegre, Canoas),
@@ -46,7 +61,7 @@ mas **não pôs o Vale do Taquari em extremo** naquela rodada. É a limitação 
 ~27 km em vales e serras; por isso o sistema também usa radar, raios e observações, e por isso os avisos
 oficiais continuam indispensáveis.
 
-## 4. Dia comum (teste de alarme falso)
+## 5. Dia comum (teste de alarme falso)
 
 Execução ao vivo em 26/11/2026, 19h50 (Brasília): 9 tempestades com alerta no país (7 moderadas e 2
 severas: Candeias do Jamari/RO e Santa Vitória/MG), nenhuma extrema. Numa versão anterior, o radar sozinho
