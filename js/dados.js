@@ -136,8 +136,9 @@ export function qualidadeAr(lat, lon) {
   const p = new URLSearchParams({
     latitude: lat, longitude: lon, timezone: 'auto',
     current: 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,carbon_monoxide',
+    hourly: 'us_aqi,pm2_5,pm10', forecast_days: '5',
   });
-  const chave = `wc:ar:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
+  const chave = `wc:ar2:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
   return comCache(chave, 60 * 60 * 1000, () => getJSON(`${API.ar}?${p}`));
 }
 
@@ -150,8 +151,15 @@ function malha(caminho, params) {
   }
   return malhaCache.get(url);
 }
-export const contornoBrasil = () => malha('paises/BR');
-export const contornoEstados = () => malha('paises/BR', 'intrarregiao=UF');
+// Contornos do país e dos estados: cópia local (malha do IBGE, qualidade mínima) para abrir rápido e
+// não depender do IBGE estar no ar; se a cópia faltar, busca no IBGE.
+const local = (arquivo, plano) => {
+  const chave = `local:${arquivo}`;
+  if (!malhaCache.has(chave)) malhaCache.set(chave, getJSON(arquivo, 20000).catch(() => { malhaCache.delete(chave); return plano(); }));
+  return malhaCache.get(chave);
+};
+export const contornoBrasil = () => local('dados/contorno-brasil.json', () => malha('paises/BR'));
+export const contornoEstados = () => local('dados/contorno-ufs.json', () => malha('paises/BR', 'intrarregiao=UF'));
 export const municipiosDoEstado = (codigoUF) => malha(`estados/${codigoUF}`, 'intrarregiao=municipio');
 
 /* ======================= Alertas ======================= */

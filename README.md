@@ -5,14 +5,16 @@ App de previsão do tempo, mapas e alertas para os 5.570 municípios do Brasil. 
 ## O que faz
 - **Busca e localização**: qualquer município (lista oficial do IBGE) ou a localização atual do celular.
 - **Previsão por consenso**: cada valor (agora, por hora e por dia) junta 11 modelos globais (ECMWF IFS e AIFS, Met Office, ICON/DWD, GFS/NOAA, ARPEGE/Météo-France, GEM/Canadá, JMA/Japão, KMA/Coreia, BoM/Austrália e CMA/China, todos pela Open-Meteo), a MET Norway e as máximas e mínimas do INMET. Usa mediana ponderada (temperatura, umidade, vento, pressão), média sem extremos (chuva) e mostra quais fontes entraram, a faixa entre elas e a concordância. Código em `js/consenso.js`.
-- **Alertas em primeiro lugar**: quando há aviso oficial para a cidade (ou no estado), uma faixa na cor do alerta aparece no topo da previsão, antes de tudo.
+- **Uma página só**: previsão, mapas e alertas ficam na mesma página, um abaixo do outro (os links do topo só levam a cada parte).
+- **Alertas em primeiro lugar**: no topo da previsão, uma faixa na cor do alerta com a linha do tempo dos alertas da cidade; sem alerta, uma faixa verde dizendo que não há nenhum alerta para a cidade e quais fontes foram consultadas. Os alertas são conferidos de novo a cada 5 minutos com a página aberta.
 - **Resumo**: um quadro curto com o tempo agora, as próximas horas, amanhã e os pontos de atenção (alertas, UV, rajadas, calor, frio, ar seco, chuva forte).
 - **Agora**: temperatura, sensação, condição, máxima, mínima, chuva, vento, umidade e UV.
 - **Por hora**: faixa rolável das próximas 24 horas com nascer e pôr do sol, mais gráfico e tabela completa.
+- **Gráficos hora a hora** (`js/graficos.js`): ao tocar num quadro (ou nos atalhos), abre um gráfico interativo de hoje, de cada um dos próximos dias ou dos 10 dias juntos: chuva e chance de chuva, temperatura e sensação, vento e rajadas (com a direção), nuvens/neblina/visibilidade, umidade e ponto de orvalho, pressão, UV e qualidade do ar.
 - **10 dias**: barras de mínima e máxima (toque no dia para ver tudo, inclusive a opinião das fontes).
 - **Quadros**: chuva nas próximas 3 horas, sensação, UV, vento, chuva do dia, sol, umidade, visibilidade, pressão, qualidade do ar e lua.
-- **Mapas**: mapa de fundo com ruas, limites de estados e municípios e nomes em português; camadas suaves de temperatura, chuva, vento (partículas animadas), nuvens, sensação, umidade, UV, pressão e visibilidade, animação contínua das próximas 24 h e radar de chuva animado (últimos 80 min).
-- **Alertas**: mapa do Brasil com todos os avisos ativos nas cores originais, lista filtrável por estado e situação de cada fonte.
+- **Mapas**: só o Brasil (os outros países ficam cobertos; `js/mapaControles.js`), com ruas, limites de estados e municípios e nomes em português; camadas suaves de temperatura, chuva, vento (partículas animadas), nuvens, sensação, umidade, UV, pressão e visibilidade, animação contínua das próximas 24 h e radar de chuva animado (últimos 80 min). Na página, um dedo rola a página e dois dedos movem o mapa (no computador, Ctrl + rolagem); botão de tela cheia.
+- **Alertas**: mapa do Brasil com todos os avisos ativos nas cores originais, filtro por estado (o mapa pinta só a parte do alerta dentro do estado escolhido) e por severidade (uma, várias ou todas), linha do tempo com uma barra por alerta (`js/linhaTempoAlertas.js`), caixa com todos os alertas vigentes e situação de cada fonte.
 - **Alertas próprios do WeatherCenter** (automáticos, não oficiais): tempestades detectadas por raios de satélite e radar com trajetória e horário de chegada nas cidades, vento/granizo/tornado observados em aeroportos e previsão de 48 h de chuva, vento, temporais e ambiente para tornado pelo consenso GFS + ECMWF. Classificados como moderado, severo ou extremo, nas mesmas cores do INMET. Critérios e limitações em [`detector/CRITERIOS.md`](detector/CRITERIOS.md).
 
 ## Fontes de dados (gratuitas, sem chave)
@@ -50,6 +52,6 @@ Código em `detector/` (Python com numpy, scipy, eccodes, netCDF4 e pillow, inst
 Notificações push dos alertas novos para as cidades que cada pessoa escolher, mesmo com o app fechado. Enviadas pelo mesmo GitHub Actions, com as inscrições guardadas no Supabase (grátis). Configuração e limitações: [`notificador/LEIAME.md`](notificador/LEIAME.md).
 
 ## Estrutura
-Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL).
+Arquivos estáticos, sem etapa de build: `index.html`, `styles.css` (visual), `js/*.js` (módulos), `sw.js` (offline), `vendor/leaflet` e `vendor/maplibre` (mapas), `vendor/polygon-clipping` (recorte dos alertas por estado, licença MIT), `vendor/fontes` (fonte única do app: Noto Sans, licença OFL), `dados/contorno-*.json` (cópia local dos contornos do IBGE).
 
 Para testar no computador: `python3 -m http.server` dentro da pasta e abrir http://localhost:8000.

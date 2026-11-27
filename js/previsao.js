@@ -1,6 +1,7 @@
 // Tela de previsão: agora, resumo com alertas, próximas 24 horas, 10 dias, quadros de detalhes e fontes do consenso
 import { $, esc, r0, num, tempo, direcao, nivelUV, nivelAr, faseLua, DIAS_SEMANA, DIAS_SEMANA_LONGO, UF_NOMES } from './util.js';
 import { iconeTempo, icone } from './icones.js';
+import { renderLinhaTempo } from './linhaTempoAlertas.js';
 
 const hora = (iso) => iso.slice(11, 16);
 const hh = (iso) => `${Number(iso.slice(11, 13))}h`;
@@ -258,6 +259,7 @@ export function renderDias(prev) {
             <div><dt>Nascer do sol</dt><dd>${d.sunrise[i] ? hora(d.sunrise[i]) : '—'}</dd></div>
             <div><dt>Pôr do sol</dt><dd>${d.sunset[i] ? hora(d.sunset[i]) : '—'}</dd></div>
           </dl>
+          <button type="button" class="btn-sec d-graf" data-grafico="chuva" data-dia="${d.time[i]}">Gráficos hora a hora deste dia ›</button>
         </div>
       </details>
     </li>`;
@@ -431,39 +433,63 @@ export function cartaoAlerta(a) {
   </div>`;
 }
 
-// Faixa no topo da previsão: o que há de oficial para a cidade e para o estado, antes de tudo
-function renderFaixaAlertas(daCidade, noEstado, cidade) {
+// Faixa no topo da previsão: os alertas da cidade, antes de tudo. Sem alerta, uma mensagem verde
+// com o que foi consultado (só sobre a cidade, sem falar de alertas em outras partes do estado).
+const NOMES_FONTES = { inmet: 'INMET', 'defesa-civil': 'Defesa Civil', marinha: 'Marinha', weathercenter: 'WeatherCenter' };
+function renderFaixaAlertas(daCidade, cidade, resultado) {
   const el = $('faixa-alertas');
-  if (!daCidade.length && !noEstado.length) { el.hidden = true; el.innerHTML = ''; return; }
-  const principal = daCidade[0] || noEstado[0];
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
-  const oficiais = daCidade.filter((a) => a.oficial !== false).length;
-  const titulo = daCidade.length
-    ? `${plural(daCidade.length, 'alerta ativo', 'alertas ativos')} para ${esc(cidade.nome)}${oficiais ? '' : ' (automático do WeatherCenter)'}`
-    : `Nenhum alerta para ${esc(cidade.nome)}, mas há ${plural(noEstado.length, 'alerta', 'alertas')} em ${esc(cidade.uf)}`;
-  const itens = (daCidade.length ? daCidade : noEstado).slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
-  const extra = daCidade.length && noEstado.length ? ` · mais ${plural(noEstado.length, 'alerta', 'alertas')} em ${esc(cidade.uf)}` : '';
-  el.style.setProperty('--cor', principal.cor);
-  el.classList.toggle('so-estado', !daCidade.length);
-  el.innerHTML = `<div class="faixa-cab">${icone('alerta')}<h2>${titulo}</h2></div>
-    <ul>${itens}</ul>
-    <div class="faixa-acoes">${daCidade.length ? '<button type="button" class="btn-sec" data-ir="alertas-cidade">Ver detalhes e o que fazer</button>' : ''}<a class="btn-sec" href="#alertas" data-aba="alertas">Mapa de alertas${extra}</a></div>`;
+  const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const consultadas = Object.entries(NOMES_FONTES).filter(([id]) => resultado.status[id] === 'ok').map(([, n]) => n);
+  const fora = Object.entries(NOMES_FONTES).filter(([id]) => resultado.status[id] && resultado.status[id] !== 'ok').map(([, n]) => n);
   el.hidden = false;
+  if (!daCidade.length) {
+    el.classList.add('sem-alerta');
+    el.classList.remove('so-estado');
+    el.style.removeProperty('--cor');
+    el.innerHTML = `<div class="faixa-cab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M8.6 12.2l2.4 2.4 4.4-4.6"/></svg>
+      <h2>Nenhum alerta para ${esc(cidade.nome)}</h2></div>
+      <ul class="faixa-detalhes">
+        <li>Nenhum aviso ativo ou previsto para a cidade agora.</li>
+        <li>Fontes consultadas: ${consultadas.map(esc).join(', ')}${fora.length ? ` <span class="fora">(${fora.map(esc).join(', ')} fora do ar agora)</span>` : ''}.</li>
+        <li>Verificado às ${hora} · a página confere de novo a cada 5 minutos.</li>
+      </ul>`;
+    return;
+  }
+  const principal = daCidade[0];
+  const oficiais = daCidade.filter((a) => a.oficial !== false).length;
+  el.classList.remove('sem-alerta', 'so-estado');
+  el.style.setProperty('--cor', principal.cor);
+  const itens = daCidade.slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
+  el.innerHTML = `<div class="faixa-cab">${icone('alerta')}<h2>${plural(daCidade.length, 'alerta ativo', 'alertas ativos')} para ${esc(cidade.nome)}${oficiais ? '' : ' (automático do WeatherCenter)'}</h2></div>
+    <ul>${itens}</ul>
+    <div class="faixa-linha" id="faixa-linha-tempo"></div>
+    <div class="faixa-acoes"><button type="button" class="btn-sec" data-ir="alertas-cidade">Ver detalhes e o que fazer</button>${cidade.uf ? `<button type="button" class="btn-sec" data-ver-uf="${esc(cidade.uf)}">Ver no mapa de alertas</button>` : ''}</div>`;
+  renderLinhaTempo($('faixa-linha-tempo'), daCidade, {
+    compacto: true,
+    aoClicar: (a) => {
+      const i = daCidade.indexOf(a);
+      const card = $('alertas-cidade').children[i];
+      if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('piscar'); setTimeout(() => card.classList.remove('piscar'), 1600); }
+    },
+  });
 }
 
 // Mostra os alertas da cidade dentro do cartão de resumo e devolve a lista
 export function renderAlertasCidade(resultado, cidade, afeta) {
   const el = $('alertas-cidade');
+  const faixa = $('faixa-alertas');
   if (!resultado || !Object.values(resultado.status).includes('ok')) {
-    $('faixa-alertas').hidden = true;
-    el.innerHTML = '<div class="aviso-neutro">Não foi possível consultar os alertas agora. Veja em <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">alertas2.inmet.gov.br</a>.</div>';
+    faixa.hidden = false;
+    faixa.classList.remove('sem-alerta');
+    faixa.classList.add('so-estado');
+    faixa.style.setProperty('--cor', '#9a968c');
+    faixa.innerHTML = '<div class="faixa-cab"><h2>Não foi possível consultar os alertas agora</h2></div><p class="pequeno">Tente de novo em instantes ou veja em <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener">alertas2.inmet.gov.br</a>. Em emergência, ligue 199.</p>';
+    el.innerHTML = '';
     return [];
   }
   const daCidade = resultado.alertas.filter((a) => afeta(a, cidade));
-  const noEstado = resultado.alertas.filter((a) => !daCidade.includes(a) && (a.estados || []).includes(cidade.uf));
-  renderFaixaAlertas(daCidade, noEstado, cidade);
-  el.innerHTML = daCidade.length
-    ? daCidade.map(cartaoAlerta).join('')
-    : `<div class="aviso-neutro ok">Nenhum alerta ativo para ${esc(cidade.nome)}.</div>`;
+  renderFaixaAlertas(daCidade, cidade, resultado);
+  el.innerHTML = daCidade.map(cartaoAlerta).join('');
   return daCidade;
 }

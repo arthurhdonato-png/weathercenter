@@ -185,7 +185,7 @@ async function render() {
   const e = estado();
   const ativo = suporta() && Notification.permission === 'granted' && e.cidades.length > 0;
 
-  // Barra da cidade aberta (aba Previsão)
+  // Barra da cidade aberta (previsão)
   const barra = $('notif-cidade');
   if (barra) {
     const c = cidadeAberta;
@@ -198,11 +198,11 @@ async function render() {
         : imp === 'ios'
           ? `<span class="notif-sino" aria-hidden="true">🔔</span><span>Quer receber alertas de <strong>${esc(c.nome)}</strong> no iPhone? Adicione o app à tela de início.</span><a href="#alertas" class="notif-link">Como fazer</a>`
           : `<span class="notif-sino" aria-hidden="true">🔔</span><span>Receba no celular os alertas novos de <strong>${esc(c.nome)}</strong>, mesmo com o app fechado.</span><button type="button" class="btn-sec" id="notif-ativar" ${ocupado ? 'disabled' : ''}>${ocupado ? 'Ativando…' : 'Ativar avisos'}</button>`;
-      if (mensagem && document.body.dataset.aba === 'previsao') barra.insertAdjacentHTML('beforeend', `<p class="notif-msg">${esc(mensagem)}</p>`);
+      if (mensagem) barra.insertAdjacentHTML('beforeend', `<p class="notif-msg">${esc(mensagem)}</p>`);
     }
   }
 
-  // Cartão completo (aba Alertas)
+  // Cartão completo (parte de alertas)
   const painel = $('notif-painel');
   if (!painel) return;
   let html = '<h2 class="rotulo">Avisos no celular</h2>';
@@ -214,7 +214,7 @@ async function render() {
     if (Notification.permission === 'denied') html += `<p class="notif-msg">⚠️ ${esc(textoBloqueado())}</p>`;
     html += e.cidades.length
       ? `<ul class="notif-cidades">${e.cidades.map((c, i) => `<li><span>${esc(nomeCidade(c))}</span><button type="button" class="btn-icone" data-remover="${i}" aria-label="Parar avisos de ${esc(c.nome)}" title="Remover" ${ocupado ? 'disabled' : ''}>✕</button></li>`).join('')}</ul>`
-      : '<p>Nenhuma cidade ainda. Abra uma cidade na aba Previsão e toque em <strong>Ativar avisos</strong>.</p>';
+      : '<p>Nenhuma cidade ainda. Abra uma cidade (busca no topo da página) e toque em <strong>Ativar avisos</strong>.</p>';
     if (cidadeAberta && cidadeAberta.lat != null && !cidadeAberta.foraDoBrasil && !e.cidades.some((x) => mesmaCidade(x, cidadeAberta))) {
       html += `<button type="button" class="btn-sec" id="notif-add-atual" ${ocupado ? 'disabled' : ''}>+ Avisar sobre ${esc(cidadeAberta.nome)}</button>`;
     }

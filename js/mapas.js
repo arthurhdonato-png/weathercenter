@@ -4,6 +4,7 @@
 import { $, num, esc, direcao, getJSON } from './util.js';
 import { contornoBrasil, gradeMapa, radarQuadros } from './dados.js';
 import { basemap, temaEscuro } from './mapaBase.js';
+import { mascaraBrasil, prepararMapa, LIMITES_BRASIL } from './mapaControles.js';
 
 export { basemap, linhasEstados } from './mapaBase.js';
 
@@ -88,7 +89,7 @@ function dentro(lon, lat, aneis) {
 const estado = {
   mapa: null, grade: null, indice: null, aneis: null, mascara: null,
   camada: CAMADAS[0], hora: 0, horaBase: 0, maxHora: 24, tocando: false,
-  campo: null, particulas: null, radar: null, valores: null,
+  campo: null, particulas: null, radar: null, valores: null, visivel: true,
 };
 
 function montarGrade(aneis) {
@@ -316,7 +317,7 @@ const CamadaVento = L.Layer.extend({
     this._dpr = dpr; this._tam = tam;
     const n = Math.round(Math.min(2600, (tam.x * tam.y) / 420));
     this._p = Array.from({ length: n }, () => this._nova({}));
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this._quadro = requestAnimationFrame(() => this._passo());
+    if (estado.visivel && !matchMedia('(prefers-reduced-motion: reduce)').matches) this._quadro = requestAnimationFrame(() => this._passo());
   },
   _nova(p) {
     p.x = Math.random() * this._tam.x; p.y = Math.random() * this._tam.y; p.idade = Math.floor(Math.random() * 80);
@@ -529,8 +530,8 @@ async function carregarDados() {
 
 export function iniciarMapas(abrirPonto) {
   if (estado.mapa) { estado.mapa.invalidateSize(); return; }
-  const mapa = L.map('mapa-tempo', { zoomControl: false, attributionControl: true, minZoom: 3, maxZoom: 14, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 })
-    .fitBounds([[-33.8, -74], [5.3, -34.8]]);
+  const mapa = L.map('mapa-tempo', { zoomControl: false, attributionControl: true, minZoom: 2.5, maxZoom: 14, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 })
+    .fitBounds(LIMITES_BRASIL);
   L.control.zoom({ position: 'bottomright' }).addTo(mapa);
   mapa.attributionControl.setPrefix(false);
   estado.mapa = mapa;
@@ -541,6 +542,8 @@ export function iniciarMapas(abrirPonto) {
   mapa.createPane('valores').style.zIndex = 660;
   mapa.getPane('valores').style.pointerEvents = 'none';
   basemap(mapa);
+  mascaraBrasil(mapa);
+  prepararMapa(mapa, $('tela-mapa-tempo'));
 
   $('mapa-camadas').innerHTML = CAMADAS.map((c, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}">${c.nome}</button>`).join('');
   $('mapa-camadas').addEventListener('click', (e) => {
@@ -571,7 +574,13 @@ export function iniciarMapas(abrirPonto) {
   carregarDados();
 }
 
-// Para a animação quando a aba de mapas some (economiza bateria)
+// Para a animação quando o mapa sai da tela (economiza bateria) e retoma as partículas quando volta
 export function pausarMapas() {
   if (estado.tocando) tocar(false);
+}
+export function mapasVisiveis(visivel) {
+  if (estado.visivel === visivel) return;
+  estado.visivel = visivel;
+  if (!visivel) { pausarMapas(); estado.particulas?._parar(); }
+  else if (estado.particulas) estado.particulas._reset();
 }
