@@ -901,5 +901,6 @@ body.carregando .painel .cartao {
 @keyframes cn-tracejar { to { stroke-dashoffset: -16; } }
 .cn-seta { fill: var(--sutil); }
 .cn-km { font-size: 13px; font-weight: 700; fill: var(--texto); text-anchor: middle; font-family: var(--fonte); }
+.cn-eta { fill: var(--acento, #0e9aa7); font-size: 12.5px; }
 :root[data-tema="escuro"] .cn-nuvem.tempestade path { fill: #4a5363; stroke: #8a94a3; }
 @media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .cn-nuvem.tempestade path { fill: #4a5363; stroke: #8a94a3; } }
