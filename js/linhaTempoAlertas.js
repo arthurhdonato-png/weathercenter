@@ -8,8 +8,8 @@ const SIGLAS = { 'Defesa Civil': 'DC', Marinha: 'MB', WeatherCenter: 'WC' };
 const ALTURA_LINHA = 30;
 const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-// Texto escuro sobre amarelo/laranja e claro sobre vermelho
-function corTexto(hex) {
+// Texto escuro sobre amarelo/laranja e claro sobre vermelho e roxo
+export function corTextoSobre(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || '').trim());
   if (!m) return '#1a1a1a';
   const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
@@ -110,8 +110,8 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
     const fonte = a.oficial === false ? 'WeatherCenter' : (a.fonte || '');
     const periodo = `${a.inicio ? fmtHora(a.inicio) : 'em vigor'} até ${a.fim ? fmtHora(a.fim) : 'sem hora para acabar'}`;
     return `<button type="button" class="lt-barra${a.oficial === false ? ' lt-auto' : ''}${it.antes ? ' lt-antes' : ''}${it.depois ? ' lt-depois' : ''}${it.futuro ? ' lt-futuro' : ''}"
-      data-i="${i}" style="left:${it.x.toFixed(1)}px;width:${it.w.toFixed(1)}px;top:${it.linha * ALTURA_LINHA}px;--cor:${esc(a.cor)};--cor-texto:${corTexto(a.cor)}"
-      title="${esc(`${a.severidade} · ${a.titulo || evento} · ${fonte}${a.oficial === false ? ' (automático)' : ''}\n${periodo}`)}" aria-label="${esc(`${a.severidade}: ${a.titulo || evento}, fonte ${fonte}, ${periodo}`)}">
+      data-i="${i}" style="left:${it.x.toFixed(1)}px;width:${it.w.toFixed(1)}px;top:${it.linha * ALTURA_LINHA}px;--cor:${esc(a.cor)};--cor-texto:${corTextoSobre(a.cor)}"
+      title="${esc(`${a.severidade}${a.risco ? ` (${a.risco.toLowerCase()})` : ''} · ${a.titulo || evento} · ${fonte}${a.oficial === false ? ' (automático)' : ''}\n${periodo}`)}" aria-label="${esc(`${a.severidade}: ${a.titulo || evento}, fonte ${fonte}, ${periodo}`)}">
       <span class="lt-rot${it.w < 130 ? ' lt-curta' : ''}"><b>${esc(evento)}</b><span class="lt-fonte">${esc(it.w < 130 ? (SIGLAS[fonte] || fonte) : fonte)}</span></span></button>`;
   }).join('');
 
@@ -125,8 +125,8 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
         </div>
       </div>
     </div>
-    <p class="lt-nota">${compacto ? 'Linha laranja: agora · listrado: ainda vai começar. Toque numa barra para ver os detalhes.'
-      : `${itens.length} alerta${itens.length === 1 ? '' : 's'} em ${nLinhas} linha${nLinhas === 1 ? '' : 's'}. Linha laranja: agora · ◂ já estava valendo · ▸ continua depois · listrado: ainda vai começar · contorno tracejado: automático do WeatherCenter. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.`}</p>
+    <p class="lt-nota">${compacto ? 'Linha turquesa: agora · listrado: ainda vai começar. Toque numa barra para ver os detalhes.'
+      : `${itens.length} alerta${itens.length === 1 ? '' : 's'} em ${nLinhas} linha${nLinhas === 1 ? '' : 's'}. Linha turquesa: agora · ◂ já estava valendo · ▸ continua depois · listrado: ainda vai começar · contorno tracejado: automático do WeatherCenter. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.`}</p>
   </div>`;
   el.querySelector('.lt-faixas').addEventListener('click', (e) => {
     const b = e.target.closest('.lt-barra');

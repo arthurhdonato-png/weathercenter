@@ -365,6 +365,37 @@ function montarConsenso(b, multi, listaModelos, met, inm) {
     faixas.push(info);
   });
 
+  // ---- Coerência entre o diário e o hora a hora ----
+  // O consenso diário (média aparada dos totais e máximas de cada modelo) não bate exatamente com a soma
+  // ou o máximo do consenso hora a hora. Para a página nunca mostrar dois números diferentes para a mesma
+  // coisa (ex.: chuva do dia no cartão × total no gráfico), os valores do dia passam a vir das horas.
+  for (let i = 0; i < H.precipitation.length; i++) if (H.precipitation[i] != null) H.precipitation[i] = Math.round(H.precipitation[i] * 10) / 10;
+  const horasDoDia = new Map();
+  H.time.forEach((t, i) => { const dia = t.slice(0, 10); if (!horasDoDia.has(dia)) horasDoDia.set(dia, []); horasDoDia.get(dia).push(i); });
+  const valores = (campo, ix) => ix.map((i) => H[campo]?.[i]).filter((v) => v != null && !Number.isNaN(v));
+  D.time.forEach((dia, i) => {
+    const ix = horasDoDia.get(dia) || [];
+    if (ix.length < 23) return; // dia incompleto no hora a hora: fica o consenso diário
+    const chuva = valores('precipitation', ix);
+    if (chuva.length >= 23) D.precipitation_sum[i] = Math.round(chuva.reduce((a, b) => a + b, 0) * 10) / 10;
+    const extremo = (campoD, campoH, fn) => { const v = valores(campoH, ix); if (v.length >= 20 && D[campoD]) D[campoD][i] = fn(...v); };
+    extremo('temperature_2m_max', 'temperature_2m', Math.max);
+    extremo('temperature_2m_min', 'temperature_2m', Math.min);
+    extremo('apparent_temperature_max', 'apparent_temperature', Math.max);
+    extremo('apparent_temperature_min', 'apparent_temperature', Math.min);
+    extremo('wind_speed_10m_max', 'wind_speed_10m', Math.max);
+    extremo('wind_gusts_10m_max', 'wind_gusts_10m', Math.max);
+    extremo('precipitation_probability_max', 'precipitation_probability', Math.max);
+    extremo('uv_index_max', 'uv_index', Math.max);
+    // A faixa "na maioria das fontes" sempre contém o valor mostrado
+    const f = faixas[i];
+    const incluir = (fx, v) => (fx && v != null ? [Math.min(fx[0], v), Math.max(fx[1], v)] : fx);
+    if (f) { f.max = incluir(f.max, D.temperature_2m_max[i]); f.min = incluir(f.min, D.temperature_2m_min[i]); f.chuva = incluir(f.chuva, D.precipitation_sum[i]); }
+    if (D.weather_code[i] != null) {
+      D.weather_code[i] = codigoCoerente(D.weather_code[i], D.precipitation_sum[i], D.precipitation_probability_max[i], null, false);
+    }
+  });
+
   // ---- Agora: valor de cada fonte interpolado para o horário atual ----
   const C = out.current;
   const tAgora = Date.parse(`${C.time}:00Z`);
@@ -393,6 +424,12 @@ function montarConsenso(b, multi, listaModelos, met, inm) {
     const iPerto = f < 0.5 ? i0 : i0 + 1;
     C.precipitation = H.precipitation[iPerto];
     C.weather_code = H.weather_code[iPerto] ?? C.weather_code;
+  }
+
+  // A temperatura de agora nunca fica fora da máxima e da mínima de hoje
+  if (C.temperature_2m != null && D.time[0] === String(C.time || '').slice(0, 10)) {
+    if (D.temperature_2m_max[0] != null && C.temperature_2m > D.temperature_2m_max[0]) D.temperature_2m_max[0] = C.temperature_2m;
+    if (D.temperature_2m_min[0] != null && C.temperature_2m < D.temperature_2m_min[0]) D.temperature_2m_min[0] = C.temperature_2m;
   }
 
   // Lista de fontes para mostrar ao usuário
@@ -437,7 +474,7 @@ function limparCacheVelho() {
       const k = localStorage.key(i);
       if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar\d*|grade\d*):/.test(k)) continue;
       const v = store.get(k);
-      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1):/.test(k)) localStorage.removeItem(k);
+      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1|cons2):/.test(k)) localStorage.removeItem(k);
     }
   } catch { /* ok */ }
 }
@@ -446,7 +483,7 @@ let limpo = false;
 // Previsão final. `cidade.id` (código IBGE) permite incluir o INMET.
 export function previsaoConsenso(lat, lon, geocode) {
   if (!limpo) { limpo = true; limparCacheVelho(); }
-  const chave = `wc:cons2:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
+  const chave = `wc:cons3:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
   return comCache(chave, 20 * 60 * 1000, async () => {
     const [b, multi, met, inm] = await Promise.allSettled([
       base(lat, lon),

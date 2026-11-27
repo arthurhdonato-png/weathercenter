@@ -96,8 +96,17 @@ export async function basemap(mapa) {
       await carregarMapLibre();
       const { fundo, topo } = prepararEstilos(await baixarEstilo(escuro ? ESTILO.escuro : ESTILO.claro), escuro);
       const opcoes = { interactive: false, attributionControl: false, fadeDuration: 150, maxTileCacheZoomLevels: 6 };
-      L.maplibreGL({ ...opcoes, style: fundo, pane: 'tilePane', attribution: ATRIBUICAO }).addTo(mapa);
-      L.maplibreGL({ ...opcoes, style: topo, pane: 'rotulos' }).addTo(mapa);
+      const cFundo = L.maplibreGL({ ...opcoes, style: fundo, pane: 'tilePane', attribution: ATRIBUICAO }).addTo(mapa);
+      const cTopo = L.maplibreGL({ ...opcoes, style: topo, pane: 'rotulos' }).addTo(mapa);
+      // Troca de tema (botão do topo ou aparelho): troca o estilo do mapa sem recriar nada
+      document.addEventListener('wc:tema', async () => {
+        try {
+          const esc = temaEscuro();
+          const novo = prepararEstilos(await baixarEstilo(esc ? ESTILO.escuro : ESTILO.claro), esc);
+          cFundo.getMaplibreMap()?.setStyle(novo.fundo);
+          cTopo.getMaplibreMap()?.setStyle(novo.topo);
+        } catch (e) { console.warn('troca de tema do mapa', e); }
+      });
       return { vetorial: true };
     } catch (e) {
       console.warn('Mapa vetorial indisponível, usando quadros do OpenStreetMap', e);
@@ -114,6 +123,8 @@ export async function linhasEstados(mapa) {
   if (!mapa.getPane('linhas')) mapa.createPane('linhas').style.zIndex = 400;
   try {
     const geo = await contornoEstados();
-    L.geoJSON(geo, { interactive: false, style: { color: temaEscuro() ? '#9a978e' : '#55534d', weight: 1, opacity: 0.6, fill: false }, pane: 'linhas' }).addTo(mapa);
+    const cor = () => (temaEscuro() ? '#8a96a3' : '#4d5763');
+    const camada = L.geoJSON(geo, { interactive: false, style: { color: cor(), weight: 1, opacity: 0.6, fill: false }, pane: 'linhas' }).addTo(mapa);
+    document.addEventListener('wc:tema', () => camada.setStyle({ color: cor() }));
   } catch (e) { console.warn('Contorno dos estados indisponível', e); }
 }

@@ -1,7 +1,7 @@
 // Tela de previsão: agora, resumo com alertas, próximas 24 horas, 10 dias, quadros de detalhes e fontes do consenso
 import { $, esc, r0, num, tempo, direcao, nivelUV, nivelAr, faseLua, DIAS_SEMANA, DIAS_SEMANA_LONGO, UF_NOMES } from './util.js';
 import { iconeTempo, icone } from './icones.js';
-import { renderLinhaTempo } from './linhaTempoAlertas.js';
+import { renderLinhaTempo, corTextoSobre } from './linhaTempoAlertas.js';
 
 const hora = (iso) => iso.slice(11, 16);
 const hh = (iso) => `${Number(iso.slice(11, 13))}h`;
@@ -149,6 +149,8 @@ export function renderHoras(prev) {
   const W = n * L, HC = 74, HB = 34, H = HC + HB + 16;
   const temps = [], chuva = [];
   for (let k = 0; k < n; k++) { temps.push(h.temperature_2m[i0 + k]); chuva.push(h.precipitation[i0 + k] || 0); }
+  // A coluna "Agora" mostra o mesmo valor do quadro principal (consenso no minuto atual)
+  if (prev.current?.temperature_2m != null) temps[0] = prev.current.temperature_2m;
   const lo = Math.min(...temps), hi = Math.max(...temps);
   const x = (k) => k * L + L / 2;
   const y = (v) => 22 + ((hi - v) / Math.max(1, hi - lo)) * (HC - 30);
@@ -381,7 +383,7 @@ export function renderFontes(prev) {
     ${fora.length ? `<details class="mais"><summary>${fora.length} fonte${fora.length === 1 ? '' : 's'} fora do consenso agora</summary>
       <ul class="fontes-lista">${fora.map((f) => `<li><span class="fonte-ponto" aria-hidden="true"></span><div><span class="f-nome">${esc(f.nome)}</span><span class="f-inst">${esc(f.inst)}. ${esc(f.motivo || '')}</span></div><span></span></li>`).join('')}</ul></details>` : ''}
     <details class="mais"><summary>Como o consenso é calculado</summary>
-      <p>Para cada hora e cada dia juntamos as previsões de todas as fontes que responderam. Temperatura, sensação, umidade, vento, pressão e nuvens usam a <strong>mediana ponderada</strong>: um modelo muito diferente dos outros não puxa o resultado. A chuva usa a média sem o maior e o menor valor. A chance de chuva combina a fração de fontes que preveem chuva com a probabilidade por conjunto de cenários da Open-Meteo. Modelos que costumam errar menos (como ECMWF e Met Office) têm peso um pouco maior, e o INMET tem peso maior nas máximas e mínimas.</p>
+      <p>Para cada hora e cada dia juntamos as previsões de todas as fontes que responderam. Temperatura, sensação, umidade, vento, pressão e nuvens usam a <strong>mediana ponderada</strong>: um modelo muito diferente dos outros não puxa o resultado. A chuva usa a média sem o maior e o menor valor. A chance de chuva combina a fração de fontes que preveem chuva com a probabilidade por conjunto de cenários da Open-Meteo. Os valores de cada dia (chuva total, máxima, mínima, vento, chance de chuva e UV) são tirados dessas mesmas horas, para os cartões, a tabela e os gráficos mostrarem sempre os mesmos números. Modelos que costumam errar menos (como ECMWF e Met Office) têm peso um pouco maior, e o INMET tem peso maior nas máximas e mínimas.</p>
       <p>A faixa “entre…” deixa de fora as fontes mais extremas. A concordância é alta quando as máximas da maioria das fontes ficam a até 2,5° umas das outras e elas concordam sobre a chuva, média até 5° e baixa acima disso. Índice UV, visibilidade, chuva minuto a minuto e nascer e pôr do sol vêm do modelo que a Open-Meteo considera melhor para o local.</p>
     </details>`;
 }
@@ -392,17 +394,20 @@ function renderTabela24h(prev, i0) {
   const fim = Math.min(i0 + 24, h.time.length);
   const idx = [];
   for (let i = i0; i < fim; i++) idx.push(i);
+  // Na coluna "Agora", os mesmos valores do quadro principal
+  const c = prev.current || {};
+  const v = (campo, i) => (i === i0 && c[campo] != null ? c[campo] : h[campo][i]);
   const linhas = [
-    ['Temperatura', (i) => `<strong>${r0(h.temperature_2m[i])}°</strong>`],
-    ['Sensação', (i) => `${r0(h.apparent_temperature[i])}°`],
+    ['Temperatura', (i) => `<strong>${r0(v('temperature_2m', i))}°</strong>`],
+    ['Sensação', (i) => `${r0(v('apparent_temperature', i))}°`],
     ['Chance de chuva', (i) => `<span class="azul">${r0(h.precipitation_probability[i])}%</span>`],
     ['Chuva', (i) => `${num(h.precipitation[i])} mm`],
     ['Índice UV', (i) => { const u = h.uv_index[i]; return `<span class="uv" style="--c:${nivelUV(u).cor}">${r0(u)}</span>`; }],
-    ['Vento', (i) => `${r0(h.wind_speed_10m[i])} ${seta(h.wind_direction_10m[i])}`],
-    ['Rajadas', (i) => `${r0(h.wind_gusts_10m[i])}`],
-    ['Umidade', (i) => `${r0(h.relative_humidity_2m[i])}%`],
+    ['Vento', (i) => `${r0(v('wind_speed_10m', i))} ${seta(v('wind_direction_10m', i))}`],
+    ['Rajadas', (i) => `${r0(v('wind_gusts_10m', i))}`],
+    ['Umidade', (i) => `${r0(v('relative_humidity_2m', i))}%`],
     ['Visibilidade', (i) => `${num(km(h.visibility[i]), 0)} km`],
-    ['Pressão', (i) => `${r0(h.pressure_msl[i])}`],
+    ['Pressão', (i) => `${r0(v('pressure_msl', i))}`],
     ...(h.n_fontes ? [['Fontes', (i) => `${h.n_fontes[i] || '—'}`]] : []),
   ];
   $('tabela-24h').innerHTML = `<div class="tabela-caixa"><table class="tabela">
@@ -420,7 +425,7 @@ export function cartaoAlerta(a) {
   const emissor = a.emissor && a.emissor !== a.fonte ? ` · ${esc(a.emissor)}` : '';
   const auto = a.oficial === false;
   return `<div class="alerta${auto ? ' alerta-auto' : ''}" style="--cor:${esc(a.cor)}" role="alert">
-    <div class="alerta-topo"><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span><span class="fonte">${esc(a.fonte)}${emissor}</span></div>
+    <div class="alerta-topo"><span class="selo" style="background:${esc(a.cor)};color:${corTextoSobre(a.cor)}">${esc(a.severidade)}</span>${a.risco ? `<span class="selo-risco">${esc(a.risco)}</span>` : ''}<span class="fonte">${esc(a.fonte)}${emissor}</span></div>
     <h3>${esc(a.titulo)}</h3>
     <p class="pequeno">${a.inicio ? `De ${fmtData(a.inicio)}` : ''}${a.fim ? ` até ${fmtData(a.fim)}` : ''}</p>
     ${a.regiao ? `<p class="pequeno">${esc(a.regiao)}</p>` : ''}
@@ -460,13 +465,14 @@ function renderFaixaAlertas(daCidade, cidade, resultado) {
   const oficiais = daCidade.filter((a) => a.oficial !== false).length;
   el.classList.remove('sem-alerta', 'so-estado');
   el.style.setProperty('--cor', principal.cor);
-  const itens = daCidade.slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
+  const itens = daCidade.slice(0, 4).map((a) => `<li><span class="selo" style="background:${esc(a.cor)};color:${corTextoSobre(a.cor)}" title="${esc(a.risco || '')}">${esc(a.severidade)}</span>${esc(a.titulo)}<span class="fonte">${esc(a.fonte)}${a.oficial === false ? ' · automático' : ''}</span></li>`).join('');
   el.innerHTML = `<div class="faixa-cab">${icone('alerta')}<h2>${plural(daCidade.length, 'alerta ativo', 'alertas ativos')} para ${esc(cidade.nome)}${oficiais ? '' : ' (automático do WeatherCenter)'}</h2></div>
     <ul>${itens}</ul>
+    <div class="faixa-linha-cab"><h3>Linha do tempo dos alertas de ${esc(cidade.nome)}</h3><span>quando cada um começa e termina, hora a hora</span></div>
     <div class="faixa-linha" id="faixa-linha-tempo"></div>
     <div class="faixa-acoes"><button type="button" class="btn-sec" data-ir="alertas-cidade">Ver detalhes e o que fazer</button>${cidade.uf ? `<button type="button" class="btn-sec" data-ver-uf="${esc(cidade.uf)}">Ver no mapa de alertas</button>` : ''}</div>`;
   renderLinhaTempo($('faixa-linha-tempo'), daCidade, {
-    compacto: true,
+    vazio: `Nenhum alerta vigente ou previsto para ${cidade.nome}.`,
     aoClicar: (a) => {
       const i = daCidade.indexOf(a);
       const card = $('alertas-cidade').children[i];

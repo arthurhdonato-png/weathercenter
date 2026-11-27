@@ -46,7 +46,11 @@ NOMES_UF = {
     'roraima': 'RR', 'santa catarina': 'SC', 'sao paulo': 'SP', 'sergipe': 'SE', 'tocantins': 'TO',
 }
 
-AMARELO, LARANJA, VERMELHO, AZUL = '#FFD400', '#FF8C00', '#E60000', '#5B9BD5'
+AMARELO, LARANJA, VERMELHO, ROXO = '#FFD400', '#FF8C00', '#E60000', '#8E24AA'
+# Padrão único de níveis do WeatherCenter (igual a js/niveis.js):
+# 1 amarelo = Perigo Potencial / Risco Moderado; 2 laranja = Perigo / Risco Alto;
+# 3 vermelho = Grande Perigo / Risco Muito Alto; 4 roxo = Alerta Extremo / Risco Extremo
+NIVEIS = {1: ('Perigo Potencial', AMARELO), 2: ('Perigo', LARANJA), 3: ('Grande Perigo', VERMELHO), 4: ('Alerta Extremo', ROXO)}
 
 
 def sem_acento(s):
@@ -190,10 +194,21 @@ def reduzir_poligonos(aneis, max_pontos=500):
     return [[[round(lat, 3), round(lon, 3)] for lat, lon in a] for a in res]
 
 
-SEVERIDADE_CAP = {
-    'extreme': ('Extrema', 3, VERMELHO), 'severe': ('Severa', 2, LARANJA),
-    'moderate': ('Moderada', 1, AMARELO), 'minor': ('Menor', 0, AZUL),
-}
+SEVERIDADE_CAP = {'extreme': 4, 'severe': 2, 'moderate': 1, 'minor': 1}
+
+
+def nivel_no_texto(texto):
+    """Nível que a própria Defesa Civil escreveu no texto ("ALERTA RISCO ALTO", "Alerta VERMELHO"...)."""
+    t = sem_acento(texto or '')
+    if re.search(r'alerta extremo|risco extremo|alerta roxo', t):
+        return 4
+    if re.search(r'risco muito alto|grande perigo|alerta vermelho', t):
+        return 3
+    if re.search(r'risco alto|alerta laranja', t):
+        return 2
+    if re.search(r'risco moderado|perigo potencial|alerta amarelo', t):
+        return 1
+    return 0
 
 
 def linhas(t):
@@ -222,7 +237,7 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     if expira and expira < AGORA:
         return None, cancelados
     inicio = data_iso(txt(info, 'onset')) or data_iso(txt(info, 'effective')) or data_iso(txt(alerta, 'sent'))
-    sev, nivel, cor = SEVERIDADE_CAP.get(txt(info, 'severity').lower(), ('Aviso', 0, AZUL))
+    nivel_cap = SEVERIDADE_CAP.get(txt(info, 'severity').lower(), 1)
     poligonos, geocodes, areas = [], [], []
     for area in filhos(info, 'area'):
         if txt(area, 'areaDesc'):
@@ -271,6 +286,8 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     if areas and len(titulo) < 40:
         titulo = f"{titulo} – {', '.join(areas)}"[:140]
     web = txt(info, 'web')
+    nivel = nivel_no_texto(f"{titulo} {riscos[0] if riscos else ''}") or nivel_cap
+    sev, cor = NIVEIS[nivel]
     return {
         'id': f'{fonte_id}-{identificador}',
         'fonteId': fonte_id,
@@ -430,8 +447,9 @@ def fonte_marinha():
             if uf in UFS and uf not in estados:
                 estados.append(uf)
         t = sem_acento(tipo)
-        nivel, cor = (3, VERMELHO) if re.search(r'tempestade|furacao|ciclone|violento|muito alto|alto/', t) else \
-            (2, LARANJA) if 'muito' in t or t.endswith('alto') else (1, AMARELO)
+        nivel = 3 if re.search(r'tempestade|furacao|ciclone|violento|muito alto|alto/', t) else \
+            2 if 'muito' in t or t.endswith('alto') else 1
+        cor = NIVEIS[nivel][1]
         alertas.append({
             'id': f'marinha-{numero}',
             'fonteId': 'marinha',
@@ -439,7 +457,7 @@ def fonte_marinha():
             'emissor': 'Centro de Hidrografia da Marinha',
             'titulo': f'Aviso de {tipo.lower()} no mar',
             'evento': tipo.title(),
-            'severidade': 'Aviso de mau tempo',
+            'severidade': NIVEIS[nivel][0],
             'nivel': nivel,
             'cor': cor,
             'inicio': iso(inicio),
