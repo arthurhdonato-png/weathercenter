@@ -474,7 +474,7 @@ function limparCacheVelho() {
       const k = localStorage.key(i);
       if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar\d*|grade\d*):/.test(k)) continue;
       const v = store.get(k);
-      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1|cons2):/.test(k)) localStorage.removeItem(k);
+      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1|cons2|grade\d*):/.test(k)) localStorage.removeItem(k);
     }
   } catch { /* ok */ }
 }
@@ -502,7 +502,7 @@ export function previsaoConsenso(lat, lon, geocode) {
       met.status === 'fulfilled' ? met.value : null,
       inm.status === 'fulfilled' ? inm.value : null,
     );
-  });
+  }, 24 * 3600 * 1000);
 }
 
 // Exportado para testes

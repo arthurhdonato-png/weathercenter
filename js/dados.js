@@ -1,6 +1,6 @@
 // Acesso às fontes de dados (todas gratuitas e sem chave de API)
 import { padronizar } from './niveis.js';
-import { getJSON, comCache, store, norm, UF_NOMES, UF_POR_NOME, UF_POR_CODIGO } from './util.js';
+import { getJSON, comCache, comCacheGrande, store, norm, UF_NOMES, UF_POR_NOME, UF_POR_CODIGO } from './util.js';
 
 export const API = {
   municipios: 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios?view=nivelado',
@@ -35,8 +35,14 @@ export function carregarMunicipios() {
   carregando = (async () => {
     let lista = store.get('wc:municipios:v1');
     if (!Array.isArray(lista) || lista.length < 5000) {
-      const dados = await getJSON(API.municipios, 30000);
-      lista = dados.map(lerMunicipio).filter(Boolean);
+      try {
+        // Lista que vem com o próprio site (gerada do IBGE): não depende de outro serviço estar no ar
+        const dados = await getJSON('dados/municipios.json', 20000);
+        lista = dados.map(([id, nome, uf]) => ({ id: String(id), nome, uf }));
+      } catch {
+        const dados = await getJSON(API.municipios, 30000);
+        lista = dados.map(lerMunicipio).filter(Boolean);
+      }
       if (lista.length > 5000) store.set('wc:municipios:v1', lista);
     }
     municipios = lista.map((m) => ({ ...m, n: norm(m.nome) }));
@@ -364,8 +370,12 @@ export const CAMPOS_MAPA = 'temperature_2m,apparent_temperature,uv_index,wind_sp
 
 // Busca a previsão das próximas ~30 horas para uma lista de pontos (em lotes)
 export async function gradeMapa(pontos) {
-  const chave = `wc:grade2:${pontos.length}:${pontos[0]?.join()}`;
-  return comCache(chave, 45 * 60 * 1000, async () => {
+  // A grade antiga ficava no localStorage (grande demais): apaga para liberar espaço
+  try { for (let i = localStorage.length - 1; i >= 0; i--) if (/^wc:grade\d*:/.test(localStorage.key(i))) localStorage.removeItem(localStorage.key(i)); } catch { /* ok */ }
+  const chave = `wc:grade3:${pontos.length}:${pontos[0]?.join()}`;
+  // Cada ponto conta como uma consulta na Open-Meteo (limite de 600 por minuto): guarda por 1 hora
+  // e, se o serviço recusar, usa a última grade de até 12 horas
+  return comCacheGrande(chave, 60 * 60 * 1000, async () => {
     const lotes = [];
     for (let i = 0; i < pontos.length; i += 100) lotes.push(pontos.slice(i, i + 100));
     const resultados = [];
@@ -383,7 +393,7 @@ export async function gradeMapa(pontos) {
         resultados[k] = Array.isArray(r) ? r : [r];
       }
     }
-    await Promise.all([trabalhador(), trabalhador(), trabalhador()]);
+    await Promise.all([trabalhador(), trabalhador()]);
     const todos = resultados.flat();
     const tempo = todos[0].hourly.time;
     const campos = CAMPOS_MAPA.split(',');
@@ -391,7 +401,7 @@ export async function gradeMapa(pontos) {
     const valores = {};
     for (const c of campos) valores[c] = todos.map((t) => t.hourly[c]);
     return { tempo, valores };
-  });
+  }, 12 * 3600 * 1000);
 }
 
 /* ======================= Radar (RainViewer) ======================= */
