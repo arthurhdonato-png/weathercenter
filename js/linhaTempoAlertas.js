@@ -125,7 +125,8 @@ export function renderLinhaTempo(el, alertas, opcoes = {}) {
         </div>
       </div>
     </div>
-    <p class="lt-nota">${itens.length} alerta${itens.length === 1 ? '' : 's'} em ${nLinhas} linha${nLinhas === 1 ? '' : 's'}. Linha laranja: agora · ◂ já estava valendo · ▸ continua depois · listrado: ainda vai começar${compacto ? '' : ' · contorno tracejado: automático do WeatherCenter'}. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.</p>
+    <p class="lt-nota">${compacto ? 'Linha laranja: agora · listrado: ainda vai começar. Toque numa barra para ver os detalhes.'
+      : `${itens.length} alerta${itens.length === 1 ? '' : 's'} em ${nLinhas} linha${nLinhas === 1 ? '' : 's'}. Linha laranja: agora · ◂ já estava valendo · ▸ continua depois · listrado: ainda vai começar · contorno tracejado: automático do WeatherCenter. Em barras curtas: DC = Defesa Civil, MB = Marinha, WC = WeatherCenter. Toque numa barra para ver os detalhes.`}</p>
   </div>`;
   el.querySelector('.lt-faixas').addEventListener('click', (e) => {
     const b = e.target.closest('.lt-barra');

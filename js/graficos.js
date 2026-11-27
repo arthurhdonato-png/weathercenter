@@ -192,9 +192,9 @@ function desenhar() {
   const series = grupo.series.filter((s) => !s.opcional || ix.some((i) => valor(s, d, i) != null));
 
   const W = Math.max(300, area.clientWidth || 600);
-  const H = W < 560 ? 230 : 280;
+  const H = W < 560 ? 300 : Math.min(440, Math.max(340, Math.round(W * 0.36)));
   const temDir = !!grupo.eixos.dir && series.some((s) => s.eixo === 'dir');
-  const M = { t: grupo.setas ? 32 : 22, r: temDir ? 44 : 14, b: dia === 'todos' ? 40 : 26, l: 42 };
+  const M = { t: grupo.setas ? 38 : 26, r: temDir ? 52 : 16, b: dia === 'todos' ? 46 : 30, l: 50 };
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
   const n = ix.length;
   const dx = iw / n;

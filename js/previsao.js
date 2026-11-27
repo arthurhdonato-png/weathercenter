@@ -106,7 +106,7 @@ export function renderResumo(prev, alertasCidade = []) {
   if (d.apparent_temperature_max[0] >= 36) atencao.push(`Calor forte: sensação de até ${r0(d.apparent_temperature_max[0])}°.`);
   if (d.apparent_temperature_min[0] <= 8 || d.apparent_temperature_min[1] <= 8) atencao.push(`Frio: sensação de até ${r0(Math.min(d.apparent_temperature_min[0], d.apparent_temperature_min[1]))}°.`);
   if (d.precipitation_sum[0] >= 30 || d.precipitation_sum[1] >= 30) atencao.push('Chuva volumosa prevista (30 mm ou mais em um dia).');
-  if (alertasCidade.length) atencao.unshift(`<strong>${alertasCidade.length} alerta${alertasCidade.length === 1 ? '' : 's'} oficial${alertasCidade.length === 1 ? '' : 'is'}</strong> para esta cidade (veja abaixo).`);
+  if (alertasCidade.length) atencao.unshift(`<strong>${alertasCidade.length} alerta${alertasCidade.length === 1 ? '' : 's'} oficial${alertasCidade.length === 1 ? '' : 'is'}</strong> para esta cidade (detalhes no topo da página).`);
   if (atencao.length) add(icone('alerta'), 'Atenção', atencao.join(' '), true);
 
   $('resumo').innerHTML = itens.join('');
@@ -145,8 +145,8 @@ export function renderHoras(prev) {
   const h = prev.hourly, d = prev.daily;
   const i0 = indiceAgora(prev);
   const n = Math.min(25, h.time.length - i0);
-  const L = 58; // largura de cada coluna
-  const W = n * L, HC = 64, HB = 30, H = HC + HB + 16;
+  const L = 66; // largura de cada coluna
+  const W = n * L, HC = 74, HB = 34, H = HC + HB + 16;
   const temps = [], chuva = [];
   for (let k = 0; k < n; k++) { temps.push(h.temperature_2m[i0 + k]); chuva.push(h.precipitation[i0 + k] || 0); }
   const lo = Math.min(...temps), hi = Math.max(...temps);
