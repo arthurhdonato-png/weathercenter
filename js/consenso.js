@@ -46,7 +46,8 @@ const D_CONSENSO = ['temperature_2m_max', 'temperature_2m_min', 'apparent_temper
   'precipitation_sum', 'weather_code', 'wind_speed_10m_max', 'wind_gusts_10m_max'];
 
 // Variáveis que vêm só da previsão principal (melhor modelo para o local, escolhido pela Open-Meteo)
-const H_BASE = [...H_CONSENSO, 'precipitation_probability', 'uv_index', 'visibility', 'is_day'];
+const H_BASE = [...H_CONSENSO, 'precipitation_probability', 'uv_index', 'visibility', 'is_day',
+  'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high'];
 const D_BASE = [...D_CONSENSO, 'apparent_temperature_max', 'precipitation_probability_max', 'uv_index_max',
   'wind_direction_10m_dominant', 'sunrise', 'sunset', 'daylight_duration'];
 const ATUAIS = ['temperature_2m', 'apparent_temperature', 'relative_humidity_2m', 'is_day', 'precipitation', 'weather_code',
@@ -434,9 +435,9 @@ function limparCacheVelho() {
     const agora = Date.now();
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar|grade\d*):/.test(k)) continue;
+      if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar\d*|grade\d*):/.test(k)) continue;
       const v = store.get(k);
-      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:prev\d*:/.test(k)) localStorage.removeItem(k);
+      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1):/.test(k)) localStorage.removeItem(k);
     }
   } catch { /* ok */ }
 }
@@ -445,7 +446,7 @@ let limpo = false;
 // Previsão final. `cidade.id` (código IBGE) permite incluir o INMET.
 export function previsaoConsenso(lat, lon, geocode) {
   if (!limpo) { limpo = true; limparCacheVelho(); }
-  const chave = `wc:cons1:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
+  const chave = `wc:cons2:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
   return comCache(chave, 20 * 60 * 1000, async () => {
     const [b, multi, met, inm] = await Promise.allSettled([
       base(lat, lon),
