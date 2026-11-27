@@ -366,7 +366,7 @@ function desenhar(el, prev, cidade, radar, alertas) {
   const tempestade = tempestadeProxima(alertas, cidade);
   const { temporal: temporalPrev, vento: ventoPrev } = previstoProximo(prev);
   // A cena ocupa toda a largura do cartão: a largura do desenho acompanha a proporção da tela
-  const altura = Math.min(220, Math.max(150, innerWidth * 0.17));
+  const altura = Math.min(170, Math.max(130, innerWidth * 0.11));
   const W = Math.max(340, Math.round((160 * Math.max(300, el.clientWidth - 32)) / altura));
   const CASA = Math.round(W / 2), CHAO = 144;
   let fundo = '', perto = '', longe = '', legenda = '';
