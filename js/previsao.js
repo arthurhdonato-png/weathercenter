@@ -145,8 +145,8 @@ export function renderHoras(prev) {
   const h = prev.hourly, d = prev.daily;
   const i0 = indiceAgora(prev);
   const n = Math.min(25, h.time.length - i0);
-  const L = 66; // largura de cada coluna
-  const W = n * L, HC = 74, HB = 34, H = HC + HB + 16;
+  const L = 54; // largura de cada coluna
+  const W = n * L, HC = 60, HB = 28, H = HC + HB + 16;
   const temps = [], chuva = [];
   for (let k = 0; k < n; k++) { temps.push(h.temperature_2m[i0 + k]); chuva.push(h.precipitation[i0 + k] || 0); }
   // A coluna "Agora" mostra o mesmo valor do quadro principal (consenso no minuto atual)
