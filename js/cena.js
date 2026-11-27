@@ -5,7 +5,7 @@
 //  - temporal: tempestades acompanhadas pelo detector do WeatherCenter (raios por satélite, com rumo e
 //    velocidade) ou, sem elas, trovoada prevista para as próximas 12 horas;
 //  - vento forte: rajadas previstas para as próximas 12 horas, vindo da direção prevista.
-import { $, esc, num, tempo } from './util.js';
+import { $, esc, num, tempo, intensidadeMm, NOMES_CHUVA, FAIXAS_CHUVA } from './util.js';
 import { radarQuadros } from './dados.js';
 
 const RAIO_KM = 150;      // até onde o radar procura chuva
@@ -13,25 +13,27 @@ const ZOOM = 6;           // quadros de 256 px no zoom 6: ~2,4 km por pixel no e
 const ALFA_CHUVA = 255;   // no esquema de cores 2 do RainViewer, garoa muito fraca é semitransparente
 const RAIO_TEMPORAL_KM = 250;
 
-// Intensidade da chuva: 1 fraca, 2 moderada, 3 forte, 4 muito forte (a animação acompanha)
+// Animação de cada intensidade (1 fraca, 2 moderada, 3 forte, 4 muito forte). A intensidade vem SEMPRE dos mm/h,
+// com os mesmos limites do resto do site (util.js), para a cena nunca contradizer os outros quadros
 export const INTENSIDADE = [
   null,
-  { nome: 'fraca', gotas: 6, dur: 1.15, larg: 1.8 },
-  { nome: 'moderada', gotas: 11, dur: 0.85, larg: 2.2 },
-  { nome: 'forte', gotas: 18, dur: 0.6, larg: 2.5 },
-  { nome: 'muito forte', gotas: 26, dur: 0.42, larg: 2.8 },
+  { nome: NOMES_CHUVA[1], gotas: 6, dur: 1.15, larg: 1.8 },
+  { nome: NOMES_CHUVA[2], gotas: 11, dur: 0.85, larg: 2.2 },
+  { nome: NOMES_CHUVA[3], gotas: 18, dur: 0.6, larg: 2.5 },
+  { nome: NOMES_CHUVA[4], gotas: 26, dur: 0.42, larg: 2.8 },
 ];
-// Por mm/h (classes usuais da meteorologia: até 2,5 fraca, até 10 moderada, até 50 forte)
-export const intensidadeMm = (mm) => (!(mm > 0) ? 0 : mm < 2.5 ? 1 : mm < 10 ? 2 : mm < 50 ? 3 : 4);
-const intensidadeCodigo = (c) => ({ 51: 1, 53: 1, 55: 2, 56: 1, 57: 2, 61: 1, 63: 2, 65: 3, 66: 1, 67: 3, 80: 1, 81: 2, 82: 4, 95: 3, 96: 4, 99: 4 }[c] || 0);
-// Cor do radar (esquema "Universal Blue"): azul claro = fraca, azul escuro = moderada/forte, amarelo e laranja = muito forte
+export { intensidadeMm };
+const CODIGOS_CHUVA = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+// Cor do radar (esquema "Universal Blue" do RainViewer) → refletividade aproximada → mm/h (Marshall-Palmer)
+// e a mesma classe de intensidade do resto do site:
+//   azul claro (até ~30 dBZ, < 2,5 mm/h) = fraca · azul escuro (~30–40 dBZ) = moderada
+//   amarelo (~40–48 dBZ, 10–50 mm/h) = forte · laranja e vermelho (≥ ~50 dBZ) = muito forte
 function intensidadePixel(d, i) {
   if (d[i + 3] < ALFA_CHUVA) return 0;
   const r = d[i], g = d[i + 1];
-  if (r >= 200) return 4;
-  if (g >= 170) return 1;
-  if (g >= 110) return 2;
-  return 3;
+  if (r >= 200) return g >= 180 ? 3 : 4;
+  if (r === 0 && g < 150) return 2;
+  return 1;
 }
 
 /* ======================= Radar: chuva mais próxima ======================= */
@@ -84,14 +86,20 @@ async function chuvaMaisProxima(host, caminho, lat, lon) {
     }
   }
   // Intensidade no próprio local (raio de ~4 km) e na chuva mais próxima (a parte mais forte num raio de ~15 km)
+  // Intensidade típica da área: a classe mais alta que cobre pelo menos 10% dos pixels com chuva
+  // (um pixel isolado forte não transforma uma garoa em "chuva muito forte")
   const maxEm = (x0c, y0c, raioPx) => {
-    let m = 0;
+    const n = [0, 0, 0, 0, 0];
     for (let y = Math.max(0, Math.floor(y0c - raioPx)); y <= Math.min(H - 1, y0c + raioPx); y++) {
       for (let x = Math.max(0, Math.floor(x0c - raioPx)); x <= Math.min(W - 1, x0c + raioPx); x++) {
-        if ((x - x0c) ** 2 + (y - y0c) ** 2 <= raioPx * raioPx) m = Math.max(m, intensidadePixel(dados, (y * W + x) * 4));
+        if ((x - x0c) ** 2 + (y - y0c) ** 2 <= raioPx * raioPx) n[intensidadePixel(dados, (y * W + x) * 4)]++;
       }
     }
-    return m;
+    const total = n[1] + n[2] + n[3] + n[4];
+    if (!total) return 0;
+    let acum = 0;
+    for (let k = 4; k >= 1; k--) { acum += n[k]; if (acum >= Math.max(2, total * 0.1)) return k; }
+    return 1;
   };
   const aqui = maxEm(cx, cy, Math.max(1, 4 / kmPorPx));
   if (!melhor || melhor.d * kmPorPx > RAIO_KM) return { chuva: null, aqui };
@@ -249,9 +257,10 @@ function ceuAgora(prev, radar) {
   const code = c.weather_code ?? 0;
   const mm = c.precipitation ?? 0;
   const neve = [71, 73, 75, 77, 85, 86].includes(code);
-  let intens = Math.max(intensidadeMm(mm), neve ? 0 : intensidadeCodigo(code), radar?.aqui || 0);
-  const chove = intens > 0 && !neve;
-  if (!chove) intens = 0;
+  // Mesma fonte dos outros quadros: chuva de agora (mm/h) e código do tempo do consenso.
+  // Chove quando o código diz chuva (o consenso já ajusta o código ao volume); a intensidade vem só dos mm/h.
+  const chove = !neve && CODIGOS_CHUVA.has(code);
+  const intens = chove ? Math.max(1, intensidadeMm(mm)) : 0;
   return {
     dia: c.is_day === 1, intens, mm, chove,
     nuvens: c.cloud_cover ?? (code >= 3 ? 90 : code === 2 ? 50 : 10),
@@ -345,7 +354,7 @@ function desenhar(el, prev, cidade, radar, alertas) {
 
   // 3) Texto: agora e o que vem, com de onde vem, a quantos km e em quanto tempo
   const agoraTxt = ceu.chove
-    ? `<strong>Chuva ${INTENSIDADE[ceu.intens].nome}</strong>${ceu.mm >= 0.1 ? ` (cerca de ${num(ceu.mm)} mm/h)` : ''}${ceu.trovoada ? ' com trovoada' : ''}`
+    ? `<strong>${esc(ceu.desc)}</strong>${ceu.mm >= 0.1 ? ` (cerca de ${num(ceu.mm)} mm/h)` : ''}`
     : `<strong>${esc(ceu.desc)}</strong>`;
   itens.push({ tipo: 'agora', html: `Agora em ${esc(cidade.nome)}: ${agoraTxt}${ceu.ventoForte ? `, vento forte ${doLado(ceu.dirVento ?? 0)} com rajadas de ${num(ceu.rajada, 0)} km/h` : ''}.` });
   if (tempestade) {
@@ -357,10 +366,12 @@ function desenhar(el, prev, cidade, radar, alertas) {
         + (t.aproxima ? `, vindo para cá a ~${num(t.kmh, 0)} km/h${t.minutos != null ? ` · <strong>${chegaTxt(t.minutos)}</strong>${t.minutos >= 5 ? ` (por volta das ${horaMais(t.minutos)})` : ''}` : ''}` : ', sem vir para cá agora')
         + '. Detectada pelos raios (WeatherCenter).' });
   }
-  if (ch && !ceu.chove) {
-    itens.push({ tipo: 'chuva', html: `<strong>Chuva ${INTENSIDADE[ch.intens].nome} a ${num(ch.km, 0)} km, ${aPonto(ch.rumo)}</strong>`
+  if (ch && !ceu.chove && ch.km >= 4) {
+    itens.push({ tipo: 'chuva', html: `<strong>Chuva ${INTENSIDADE[ch.intens].nome} a ${num(ch.km, 0)} km, ${aPonto(ch.rumo)}</strong> (${FAIXAS_CHUVA[ch.intens]}, pelo radar)`
       + (radar.aproximando ? `, se aproximando${radar.kmh ? ` a ~${num(radar.kmh, 0)} km/h` : ''}${radar.minutos != null ? ` · <strong>${chegaTxt(radar.minutos)}</strong>${radar.minutos >= 5 ? ` (por volta das ${horaMais(radar.minutos)})` : ''}` : ''}` : radar.aproximando === false ? ', sem se aproximar agora' : '')
       + '.' });
+  } else if (radar?.aqui && !ceu.chove) {
+    itens.push({ tipo: 'chuva', html: `<strong>O radar mostra chuva ${INTENSIDADE[radar.aqui].nome} sobre a cidade agora</strong> (${FAIXAS_CHUVA[radar.aqui]}), que a previsão ainda não indicava.` });
   } else if (radar && !ch && !ceu.chove) {
     itens.push({ tipo: 'ok', html: `Nenhuma chuva no radar num raio de ${RAIO_KM} km.` });
   }

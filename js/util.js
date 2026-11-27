@@ -66,6 +66,13 @@ export async function comCacheGrande(chave, ttlMs, fn, velhoAteMs = 0) {
 // Erro de "consultas demais" (HTTP 429) do serviço de previsão
 export const ehLimite = (e) => e?.status === 429 || /429|too many|limit exceeded/i.test(String(e?.message || ''));
 
+// Intensidade da chuva por mm/h. É a ÚNICA regra do site: o texto do tempo, a cena animada e o radar
+// usam estes limites (classes usuais da meteorologia): até 2,5 fraca, até 10 moderada, até 50 forte, acima muito forte
+export const LIMITES_CHUVA = [0.1, 2.5, 10, 50];
+export const NOMES_CHUVA = [null, 'fraca', 'moderada', 'forte', 'muito forte'];
+export const FAIXAS_CHUVA = [null, 'até 2,5 mm/h', '2,5 a 10 mm/h', '10 a 50 mm/h', 'mais de 50 mm/h'];
+export const intensidadeMm = (mm) => (!(mm >= LIMITES_CHUVA[0]) ? 0 : mm < LIMITES_CHUVA[1] ? 1 : mm < LIMITES_CHUVA[2] ? 2 : mm < LIMITES_CHUVA[3] ? 3 : 4);
+
 export const UF_NOMES = {
   AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
   DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso',
@@ -89,12 +96,12 @@ const TEMPO = {
   45: ['Nevoeiro', '🌫️', '🌫️', 'nublado'], 48: ['Nevoeiro com geada', '🌫️', '🌫️', 'nublado'],
   51: ['Garoa fraca', '🌦️', '🌧️', 'chuva'], 53: ['Garoa', '🌦️', '🌧️', 'chuva'], 55: ['Garoa forte', '🌧️', '🌧️', 'chuva'],
   56: ['Garoa congelante', '🌧️', '🌧️', 'chuva'], 57: ['Garoa congelante forte', '🌧️', '🌧️', 'chuva'],
-  61: ['Chuva fraca', '🌦️', '🌧️', 'chuva'], 63: ['Chuva', '🌧️', '🌧️', 'chuva'], 65: ['Chuva forte', '🌧️', '🌧️', 'chuva'],
+  61: ['Chuva fraca', '🌦️', '🌧️', 'chuva'], 63: ['Chuva moderada', '🌧️', '🌧️', 'chuva'], 65: ['Chuva forte', '🌧️', '🌧️', 'chuva'],
   66: ['Chuva congelante', '🌧️', '🌧️', 'chuva'], 67: ['Chuva congelante forte', '🌧️', '🌧️', 'chuva'],
   71: ['Neve fraca', '🌨️', '🌨️', 'nublado'], 73: ['Neve', '🌨️', '🌨️', 'nublado'], 75: ['Neve forte', '❄️', '❄️', 'nublado'],
   77: ['Grãos de neve', '🌨️', '🌨️', 'nublado'],
-  80: ['Pancadas de chuva', '🌦️', '🌧️', 'chuva'], 81: ['Pancadas de chuva', '🌧️', '🌧️', 'chuva'],
-  82: ['Pancadas fortes', '⛈️', '⛈️', 'tempestade'], 85: ['Pancadas de neve', '🌨️', '🌨️', 'nublado'],
+  80: ['Pancadas de chuva fraca', '🌦️', '🌧️', 'chuva'], 81: ['Pancadas de chuva moderada', '🌧️', '🌧️', 'chuva'],
+  82: ['Pancadas de chuva forte', '⛈️', '⛈️', 'tempestade'], 85: ['Pancadas de neve', '🌨️', '🌨️', 'nublado'],
   86: ['Pancadas de neve fortes', '❄️', '❄️', 'nublado'],
   95: ['Trovoadas', '⛈️', '⛈️', 'tempestade'], 96: ['Trovoadas com granizo', '⛈️', '⛈️', 'tempestade'],
   99: ['Trovoadas com granizo forte', '⛈️', '⛈️', 'tempestade'],
