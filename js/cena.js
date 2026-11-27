@@ -102,10 +102,20 @@ async function chuvaMaisProxima(host, caminho, lat, lon) {
     return 1;
   };
   const aqui = maxEm(cx, cy, Math.max(1, 4 / kmPorPx));
-  if (!melhor || melhor.d * kmPorPx > RAIO_KM) return { chuva: null, aqui };
+  // Máscara da chuva em volta da casa (para medir o movimento entre dois quadros do radar)
+  const lado = 2 * r + 1, ox = Math.round(cx) - r, oy = Math.round(cy) - r;
+  const mascara = new Uint8Array(lado * lado);
+  for (let y = 0; y < lado; y++) {
+    for (let x = 0; x < lado; x++) {
+      const X = ox + x, Y = oy + y;
+      if (X >= 0 && Y >= 0 && X < W && Y < H && dados[(Y * W + X) * 4 + 3] >= ALFA_CHUVA) mascara[y * lado + x] = 1;
+    }
+  }
+  const grade = { mascara, lado, kmPorPx };
+  if (!melhor || melhor.d * kmPorPx > RAIO_KM) return { chuva: null, aqui, grade };
   const rumo = ((Math.atan2(melhor.dx, -melhor.dy) * 180) / Math.PI + 360) % 360; // 0 = norte, 90 = leste
   const intens = Math.max(1, maxEm(cx + melhor.dx, cy + melhor.dy, 15 / kmPorPx));
-  return { chuva: { km: melhor.d * kmPorPx, rumo, dx: melhor.dx, intens }, aqui };
+  return { chuva: { km: melhor.d * kmPorPx, rumo, dx: melhor.dx, intens }, aqui, grade };
 }
 
 const PONTOS = ['norte', 'nordeste', 'leste', 'sudeste', 'sul', 'sudoeste', 'oeste', 'noroeste'];
@@ -140,24 +150,75 @@ async function radarAgora(lat, lon) {
     chuvaMaisProxima(host, ultimo.path, lat, lon),
     antes && antes !== ultimo ? chuvaMaisProxima(host, antes.path, lat, lon).catch(() => null) : null,
   ]);
-  const agora = leitura.chuva, anterior = anteriorL?.chuva;
-  let aproximando = null, minutos = null, kmh = null;
-  if (agora && anterior) {
-    const dt = (ultimo.time - antes.time) / 60;
-    const ganho = anterior.km - agora.km;
-    aproximando = ganho > 2;
-    if (aproximando && dt > 0) {
-      const v = ganho / dt; // km por minuto
-      kmh = Math.round(v * 60);
-      minutos = Math.round(agora.km / v);
-      if (minutos > 300) minutos = null;
+  const agora = leitura.chuva;
+  let aproximando = null, minutos = null, kmh = null, paraRumo = null, motivo = null;
+  const mov = anteriorL ? movimento(anteriorL.grade, leitura.grade, (ultimo.time - antes.time) / 60) : null;
+  if (agora) {
+    if (!mov) motivo = 'sem dados';
+    else if (mov.kmh < 5) { kmh = mov.kmh; aproximando = false; motivo = 'parada'; }
+    else {
+      kmh = mov.kmh; paraRumo = mov.rumo;
+      minutos = chegada(leitura.grade, mov);
+      aproximando = minutos != null;
+      if (!aproximando) motivo = 'passa longe';
     }
   }
-  const v = { chuva: agora, aqui: leitura.aqui, aproximando, minutos, kmh, hora: new Date(ultimo.time * 1000) };
+  const v = { chuva: agora, aqui: leitura.aqui, aproximando, minutos, kmh, paraRumo, motivo, hora: new Date(ultimo.time * 1000) };
   radarCache = { chave, t: Date.now(), v };
   return v;
 }
 
+
+// Movimento da chuva entre dois quadros do radar: o deslocamento que melhor sobrepõe as duas máscaras
+// (correlação simples). Devolve { vx, vy } em km/min (x para leste, y para o sul), velocidade e rumo.
+function movimento(antes, depois, dtMin) {
+  if (!antes || !depois || antes.lado !== depois.lado || !(dtMin > 0)) return null;
+  const { lado, kmPorPx } = depois;
+  const passo = 2; // usa um pixel a cada 2 (mais rápido, precisão de ~4 km)
+  const pts = [];
+  for (let y = 0; y < lado; y += passo) for (let x = 0; x < lado; x += passo) if (antes.mascara[y * lado + x]) pts.push(x, y);
+  if (pts.length < 2 * 8) return null; // pouca chuva para medir
+  const maxDesl = Math.ceil((120 / 60) * dtMin / kmPorPx); // até 120 km/h
+  let melhor = { n: -1, sx: 0, sy: 0 };
+  for (let sy = -maxDesl; sy <= maxDesl; sy++) {
+    for (let sx = -maxDesl; sx <= maxDesl; sx++) {
+      let n = 0;
+      for (let k = 0; k < pts.length; k += 2) {
+        const x = pts[k] + sx, y = pts[k + 1] + sy;
+        if (x >= 0 && y >= 0 && x < lado && y < lado && depois.mascara[y * lado + x]) n++;
+      }
+      // Em empate, fica com o menor deslocamento
+      if (n > melhor.n || (n === melhor.n && sx * sx + sy * sy < melhor.sx ** 2 + melhor.sy ** 2)) melhor = { n, sx, sy };
+    }
+  }
+  if (melhor.n < pts.length / 2 * 0.25) return null; // sobreposição fraca: a chuva mudou demais
+  const vx = (melhor.sx * kmPorPx) / dtMin, vy = (melhor.sy * kmPorPx) / dtMin;
+  const kmh = Math.round(Math.hypot(vx, vy) * 60);
+  const rumo = ((Math.atan2(vx, -vy) * 180) / Math.PI + 360) % 360; // para onde vai (0 = norte)
+  return { vx, vy, kmh, rumo };
+}
+
+// Em quantos minutos a chuva chega à casa, seguindo o movimento medido (null se passar longe)
+function chegada(grade, mov) {
+  const { mascara, lado, kmPorPx } = grade;
+  const c = (lado - 1) / 2, raio = 5; // chega quando passa a menos de 5 km da casa
+  const v2 = mov.vx * mov.vx + mov.vy * mov.vy;
+  if (!(v2 > 0)) return null;
+  let min = Infinity;
+  for (let y = 0; y < lado; y++) {
+    for (let x = 0; x < lado; x++) {
+      if (!mascara[y * lado + x]) continue;
+      const px = (x - c) * kmPorPx, py = (y - c) * kmPorPx; // posição da chuva em km, relativa à casa
+      const t = -(px * mov.vx + py * mov.vy) / v2; // minutos até o ponto mais próximo da casa
+      if (t <= 0) continue;
+      const perp2 = (px + mov.vx * t) ** 2 + (py + mov.vy * t) ** 2;
+      if (perp2 > raio * raio) continue;
+      const tEntrada = t - Math.sqrt(raio * raio - perp2) / Math.sqrt(v2);
+      if (tEntrada < min) min = Math.max(0, tEntrada);
+    }
+  }
+  return Number.isFinite(min) && min <= 360 ? Math.round(min) : null;
+}
 
 /* ======================= O que vem por aí (tempestades e vento) ======================= */
 // Tempestade acompanhada pelo detector (raios por satélite): a mais próxima que esteja vindo para cá
@@ -175,7 +236,7 @@ function tempestadeProxima(alertas, cidade) {
     if (minutos == null && v >= 5 && desvio < 50) minutos = Math.round((km / (v * Math.cos((desvio * Math.PI) / 180))) * 60);
     if (minutos != null && minutos > 360) minutos = null;
     const aproxima = minutos != null || (v >= 5 && desvio < 50);
-    const item = { km, rumo, kmh: v, minutos, aproxima, titulo: a.evento || a.titulo, nivel: a.nivel, cor: a.cor, raiosMin: d.raiosPorMin };
+    const item = { km, rumo, kmh: v, rumoTempestade: d.rumoGraus, minutos, aproxima, titulo: a.evento || a.titulo, nivel: a.nivel, cor: a.cor, raiosMin: d.raiosPorMin };
     // Prioridade: a que chega antes; depois a mais perto que se aproxima; depois a mais perto
     const nota = (x) => (x.minutos != null ? x.minutos : x.aproxima ? 1000 + x.km : 5000 + x.km);
     if (!melhor || nota(item) < nota(melhor)) melhor = item;
@@ -281,11 +342,23 @@ const posLado = (CASA, frac, direita) => {
 // Lado na cena a partir do rumo (onde está): leste à direita, oeste à esquerda
 const ehDireita = (rumo) => Math.sin((rumo * Math.PI) / 180) >= 0;
 
+// Tempo até chegar, pelo movimento medido no radar (sempre diz algo: hora, "passa longe" ou "parada")
+function rotuloTempoRadar(r) {
+  if (r.minutos != null) return r.minutos < 5 ? 'chegando' : `~${fmtMin(r.minutos)}`;
+  return r.motivo === 'parada' ? 'parada' : r.motivo === 'passa longe' ? 'não vem' : 'sem hora';
+}
+function textoTempoRadar(r) {
+  if (r.minutos != null) return `Vem para cá a ~${num(r.kmh, 0)} km/h · <strong>${chegaTxt(r.minutos)}</strong>${r.minutos >= 5 ? ` (por volta das ${horaMais(r.minutos)})` : ''}.`;
+  if (r.motivo === 'parada') return '<strong>Quase parada</strong>: sem previsão de chegada por enquanto.';
+  if (r.motivo === 'passa longe') return `<strong>Não deve chegar aqui</strong>: segue para o ${ponto(r.paraRumo ?? 0)} a ~${num(r.kmh, 0)} km/h.`;
+  return 'Ainda não deu para medir o movimento no radar (pouca chuva ou só um quadro); a hora de chegada aparece na próxima atualização.';
+}
+
 function regua(CASA, x, direita, rotulo, aproxima, y = 136) {
   const xi = CASA + (direita ? 46 : -46), xf = x + (direita ? -22 : 22);
   const seta = aproxima ? `<path class="cn-seta" d="M${xi} ${y} l${direita ? 9 : -9} -5 v10 z"/>` : '';
   return `<line class="cn-dist${aproxima ? ' chegando' : ''}${direita ? ' de-dir' : ''}" x1="${xi}" y1="${y}" x2="${xf}" y2="${y}"/>${seta}
-    <text class="cn-km" x="${(xi + xf) / 2}" y="${y - 6}">${esc(rotulo)}</text>`;
+    ${rotulo.split(' · ').map((t, k) => `<text class="cn-km${k ? ' cn-eta' : ''}" x="${(xi + xf) / 2}" y="${k ? y + 15 : y - 6}">${esc(t)}</text>`).join('')}`;
 }
 
 function desenhar(el, prev, cidade, radar, alertas) {
@@ -309,21 +382,21 @@ function desenhar(el, prev, cidade, radar, alertas) {
     const direita = ehDireita(t.rumo);
     const x = posLado(CASA, t.km / RAIO_TEMPORAL_KM, direita);
     longe += `<g class="cn-chegando${t.aproxima ? (direita ? ' vem-esq' : ' vem-dir') : ''}">${nuvem(x, 38, 1.05, 'tempestade')}${gotas(x, 58, 74, 4)}${raio(x + 10, 50)}${raio(x - 16, 54, 1.7)}</g>`;
-    longe += regua(CASA, x, direita, `${num(t.km, 0)} km`, t.aproxima);
+    longe += regua(CASA, x, direita, `${num(t.km, 0)} km · ${t.minutos != null ? (t.minutos < 5 ? 'chegando' : `~${fmtMin(t.minutos)}`) : t.aproxima ? 'vindo' : 'não vem'}`, t.aproxima);
     lado = { direita };
   } else if (ch && !ceu.chove && ch.km >= 4) {
     const direita = ch.dx >= 0;
     const x = posLado(CASA, ch.km / RAIO_KM, direita);
     const intensa = ch.intens >= 4;
     longe += `<g class="cn-chegando${radar.aproximando ? (direita ? ' vem-esq' : ' vem-dir') : ''}">${nuvem(x, 42, 0.95, intensa ? 'tempestade' : 'escura')}${gotas(x, 62, 70, ch.intens)}${intensa ? raio(x + 12, 54) : ''}</g>`;
-    longe += regua(CASA, x, direita, `${num(ch.km, 0)} km`, !!radar.aproximando);
+    longe += regua(CASA, x, direita, `${num(ch.km, 0)} km · ${rotuloTempoRadar(radar)}`, !!radar.aproximando);
     lado = { direita };
   } else if (temporalPrev && !ceu.trovoada) {
     // Sem tempestade no radar ou no detector: a trovoada prevista aparece ao lado, mais longe quanto mais demora
     const direita = temporalPrev.dir != null ? ehDireita(temporalPrev.dir) : true; // vem do lado de onde sopra o vento
     const x = posLado(CASA, temporalPrev.horas / 12, direita);
     longe += `<g class="cn-chegando prevista">${nuvem(x, 40, 1, 'tempestade')}${gotas(x, 60, 70, 3)}${raio(x + 10, 52)}</g>`;
-    longe += regua(CASA, x, direita, `às ${temporalPrev.hora}`, true);
+    longe += regua(CASA, x, direita, `~${temporalPrev.horas} h · ${temporalPrev.hora}`, true);
     lado = { direita };
   }
 
@@ -349,7 +422,7 @@ function desenhar(el, prev, cidade, radar, alertas) {
     const direita = ventoPrev.dir != null ? ehDireita(ventoPrev.dir) : true;
     const x = posLado(CASA, ventoPrev.horas / 12, direita);
     longe += vento(x, 92, 90, !direita, ventoPrev.rajada >= 75);
-    if (!lado || lado.direita !== direita) longe += regua(CASA, x, direita, `às ${ventoPrev.hora}`, true, 118);
+    if (!lado || lado.direita !== direita) longe += regua(CASA, x, direita, `~${ventoPrev.horas} h · ${ventoPrev.hora}`, true, 118);
   }
 
   // 3) Texto: agora e o que vem, com de onde vem, a quantos km e em quanto tempo
@@ -363,13 +436,13 @@ function desenhar(el, prev, cidade, radar, alertas) {
     itens.push({ tipo: 'temporal', html: sobre
       ? `<strong>Tempestade sobre a cidade agora</strong> (${esc(t.titulo)}), detectada pelos raios.`
       : `<strong>Tempestade a ${num(t.km, 0)} km, ${aPonto(t.rumo)}</strong>`
-        + (t.aproxima ? `, vindo para cá a ~${num(t.kmh, 0)} km/h${t.minutos != null ? ` · <strong>${chegaTxt(t.minutos)}</strong>${t.minutos >= 5 ? ` (por volta das ${horaMais(t.minutos)})` : ''}` : ''}` : ', sem vir para cá agora')
+        + (t.minutos != null ? `, vindo para cá a ~${num(t.kmh, 0)} km/h · <strong>${chegaTxt(t.minutos)}</strong>${t.minutos >= 5 ? ` (por volta das ${horaMais(t.minutos)})` : ''}`
+          : t.aproxima ? `, vindo para cá a ~${num(t.kmh, 0)} km/h, mas ainda sem hora de chegada confiável`
+            : t.kmh >= 5 ? `. <strong>Não deve chegar aqui</strong>: segue para o ${ponto(t.rumoTempestade ?? 0)} a ~${num(t.kmh, 0)} km/h` : '. <strong>Quase parada</strong>: sem previsão de chegada')
         + '. Detectada pelos raios (WeatherCenter).' });
   }
   if (ch && !ceu.chove && ch.km >= 4) {
-    itens.push({ tipo: 'chuva', html: `<strong>Chuva ${INTENSIDADE[ch.intens].nome} a ${num(ch.km, 0)} km, ${aPonto(ch.rumo)}</strong> (${FAIXAS_CHUVA[ch.intens]}, pelo radar)`
-      + (radar.aproximando ? `, se aproximando${radar.kmh ? ` a ~${num(radar.kmh, 0)} km/h` : ''}${radar.minutos != null ? ` · <strong>${chegaTxt(radar.minutos)}</strong>${radar.minutos >= 5 ? ` (por volta das ${horaMais(radar.minutos)})` : ''}` : ''}` : radar.aproximando === false ? ', sem se aproximar agora' : '')
-      + '.' });
+    itens.push({ tipo: 'chuva', html: `<strong>Chuva ${INTENSIDADE[ch.intens].nome} a ${num(ch.km, 0)} km, ${aPonto(ch.rumo)}</strong> (${FAIXAS_CHUVA[ch.intens]}, pelo radar). ${textoTempoRadar(radar)}` });
   } else if (radar?.aqui && !ceu.chove) {
     itens.push({ tipo: 'chuva', html: `<strong>O radar mostra chuva ${INTENSIDADE[radar.aqui].nome} sobre a cidade agora</strong> (${FAIXAS_CHUVA[radar.aqui]}), que a previsão ainda não indicava.` });
   } else if (radar && !ch && !ceu.chove) {
