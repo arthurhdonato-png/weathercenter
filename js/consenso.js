@@ -240,6 +240,98 @@ async function inmet(geocode) {
   });
 }
 
+
+/* ======================= Plano B: previsão só com a MET Norway ======================= */
+// Quando a Open-Meteo recusa (limite de consultas da rede do usuário), monta a mesma estrutura
+// que a Open-Meteo devolveria a partir da MET Norway, para a página abrir normalmente.
+const FUSO_UF = { 12: -5, 11: -4, 13: -4, 14: -4, 50: -4, 51: -4 }; // AC; RO, AM, RR, MS, MT; demais -3
+function fusoHoras(lat, lon, geocode) {
+  const uf = /^\d{7}$/.test(String(geocode || '')) ? +String(geocode).slice(0, 2) : null;
+  if (uf != null) return FUSO_UF[uf] ?? -3;
+  if (lon < -66 && lat > -11.5) return -5;
+  if (lon < -52 && !(lat > -2 && lon > -54.5)) return -4;
+  return -3;
+}
+// Nascer e pôr do sol (fórmula da NOAA, precisão de ~1 min), em horas UTC
+function solUTC(diaIso, lat, lon) {
+  const d = new Date(`${diaIso}T12:00:00Z`);
+  const n = Math.floor((d - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86400000);
+  const g = (2 * Math.PI / 365) * (n - 1);
+  const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const dec = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const fi = (lat * Math.PI) / 180;
+  const ha = Math.acos(Math.min(1, Math.max(-1, Math.cos((90.833 * Math.PI) / 180) / (Math.cos(fi) * Math.cos(dec)) - Math.tan(fi) * Math.tan(dec)))) * 180 / Math.PI;
+  const nasce = (720 - 4 * (lon + ha) - eq) / 60, poe = (720 - 4 * (lon - ha) - eq) / 60;
+  return { nasce, poe };
+}
+function baseDeMET(serie, lat, lon, geocode) {
+  if (!serie?.length) throw new Error('MET Norway sem dados');
+  const fuso = fusoHoras(lat, lon, geocode), off = fuso * 3600;
+  const pts = serie.map((x) => ({ ...x, ms: Date.parse(x.t) })).filter((x) => x.temp != null);
+  const ini = pts[0].ms, fim = pts[pts.length - 1].ms;
+  const H = Object.fromEntries(H_BASE.map((v) => [v, []]));
+  H.time = [];
+  const interp = (campo, ms, angular = false) => {
+    let k = pts.findIndex((p) => p.ms >= ms);
+    if (k <= 0) return pts[Math.max(0, k)]?.[campo] ?? null;
+    const a = pts[k - 1], b2 = pts[k];
+    if (a[campo] == null || b2[campo] == null) return a[campo] ?? b2[campo] ?? null;
+    const f = (ms - a.ms) / (b2.ms - a.ms);
+    if (angular) { let d = b2[campo] - a[campo]; if (d > 180) d -= 360; if (d < -180) d += 360; return (a[campo] + d * f + 360) % 360; }
+    return a[campo] + (b2[campo] - a[campo]) * f;
+  };
+  // Chuva e código de cada hora: do passo de 1 h ou, mais adiante, do passo de 6 h dividido por 6
+  const chuvaEm = (ms) => {
+    const exata = pts.find((p) => p.ms === ms && p.chuva1 != null);
+    if (exata) return { mm: exata.chuva1, cod: exata.cod1 };
+    const bloco = [...pts].reverse().find((p) => p.ms <= ms && ms < p.ms + 6 * 3600000 && p.chuva6 != null);
+    return bloco ? { mm: bloco.chuva6 / 6, cod: bloco.cod6 } : { mm: null, cod: null };
+  };
+  const dias = new Set();
+  for (let ms = ini; ms <= fim; ms += 3600000) {
+    const t = horaLocal(new Date(ms).toISOString(), off);
+    H.time.push(t); dias.add(t.slice(0, 10));
+    const temp = interp('temp', ms), ur = interp('ur', ms);
+    const { mm, cod } = chuvaEm(ms);
+    const a = 17.62, bb = 243.12, gm = Math.log(Math.max(1, ur ?? 70) / 100) + (a * temp) / (bb + temp);
+    const sol = solUTC(t.slice(0, 10), lat, lon);
+    const hUTC = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
+    const dia = ((hUTC - sol.nasce + 24) % 24) < ((sol.poe - sol.nasce + 24) % 24);
+    H.temperature_2m.push(temp); H.apparent_temperature.push(temp); H.relative_humidity_2m.push(ur);
+    H.dew_point_2m.push((bb * gm) / (a - gm)); H.precipitation.push(mm); H.weather_code.push(cod ?? (interp('nuvens', ms) > 80 ? 3 : interp('nuvens', ms) > 40 ? 2 : 1));
+    H.cloud_cover.push(interp('nuvens', ms)); H.pressure_msl.push(interp('p', ms)); H.wind_speed_10m.push(interp('vento', ms));
+    H.wind_direction_10m.push(interp('dir', ms, true)); H.wind_gusts_10m.push(interp('vento', ms) != null ? interp('vento', ms) * 1.5 : null);
+    H.precipitation_probability.push(null); H.uv_index.push(null); H.visibility.push(null); H.is_day.push(dia ? 1 : 0);
+    H.cloud_cover_low.push(null); H.cloud_cover_mid.push(null); H.cloud_cover_high.push(null);
+  }
+  const D = Object.fromEntries([...new Set(D_BASE)].map((v) => [v, []]));
+  D.time = [...dias].filter((d, k) => k === 0 || H.time.filter((t) => t.startsWith(d)).length >= 18); // hoje entra mesmo incompleto
+  for (const dia of D.time) {
+    for (const v of Object.keys(D)) if (v !== 'time') D[v].push(null);
+    const i = D.time.indexOf(dia), sol = solUTC(dia, lat, lon);
+    const hhmm = (h) => { const x = ((h + fuso + 24) % 24); return `${dia}T${pad(Math.floor(x))}:${pad(Math.floor((x % 1) * 60))}`; };
+    D.sunrise[i] = hhmm(sol.nasce); D.sunset[i] = hhmm(sol.poe);
+    D.daylight_duration[i] = ((sol.poe - sol.nasce + 24) % 24) * 3600;
+    const ix = H.time.map((t, k) => (t.startsWith(dia) ? k : -1)).filter((k) => k >= 0);
+    const cods = ix.map((k) => H.weather_code[k]).filter((c) => c != null);
+    D.weather_code[i] = cods.length ? Math.max(...cods) : null;
+    D.wind_direction_10m_dominant[i] = H.wind_direction_10m[ix[Math.floor(ix.length / 2)]];
+    // Valores do dia a partir das horas disponíveis (hoje começa agora; os últimos dias vêm de passos de 6 h)
+    const vals = (c) => ix.map((k) => H[c][k]).filter((x) => x != null);
+    const ext = (cd, ch, f) => { const v = vals(ch); if (v.length) D[cd][i] = f(...v); };
+    ext('temperature_2m_max', 'temperature_2m', Math.max); ext('temperature_2m_min', 'temperature_2m', Math.min);
+    ext('apparent_temperature_max', 'apparent_temperature', Math.max); ext('apparent_temperature_min', 'apparent_temperature', Math.min);
+    ext('wind_speed_10m_max', 'wind_speed_10m', Math.max); ext('wind_gusts_10m_max', 'wind_gusts_10m', Math.max);
+    const mm = vals('precipitation'); if (mm.length) D.precipitation_sum[i] = Math.round(mm.reduce((x, y) => x + y, 0) * 10) / 10;
+  }
+  const agoraMs = Math.floor(Date.now() / 3600000) * 3600000;
+  const tAgora = horaLocal(new Date(Math.max(ini, Math.min(fim, agoraMs))).toISOString(), off);
+  const k = Math.max(0, H.time.indexOf(tAgora));
+  const current = { time: H.time[k] };
+  for (const v of ATUAIS) current[v] = H[v]?.[k] ?? null;
+  return { latitude: lat, longitude: lon, utc_offset_seconds: off, timezone: `GMT${fuso}`, current, hourly: H, daily: D, soMET: true };
+}
+
 /* ======================= Combinação ======================= */
 const pad = (n) => String(n).padStart(2, '0');
 function horaLocal(isoUtc, offsetSeg) {
@@ -507,14 +599,31 @@ export function previsaoConsenso(lat, lon, geocode) {
     if (multi.status === 'rejected') console.warn('modelos', multi.reason);
     if (met.status === 'rejected') console.warn('MET Norway', met.reason);
     if (inm.status === 'rejected') console.info('INMET previsão', inm.reason?.message);
-    if (b.status === 'rejected') throw b.reason;
-    return montarConsenso(
-      b.value,
+    let principal = b.status === 'fulfilled' ? b.value : null;
+    if (!principal) {
+      // Open-Meteo fora (ex.: limite de consultas): usa a MET Norway como base, se ela respondeu
+      if (met.status !== 'fulfilled') throw b.reason;
+      console.warn('Open-Meteo indisponível; previsão só com MET Norway', b.reason?.message);
+      principal = baseDeMET(met.value, +lat, +lon, geocode);
+    }
+    const r = montarConsenso(
+      principal,
       multi.status === 'fulfilled' ? multi.value.dados : null,
       multi.status === 'fulfilled' ? multi.value.lista : [],
       met.status === 'fulfilled' ? met.value : null,
       inm.status === 'fulfilled' ? inm.value : null,
     );
+    if (principal.soMET) {
+      // Com uma fonte só, a chance de chuva é estimada pelo volume previsto (em vez de só 0% ou 100%)
+      r.soMET = true;
+      const chance = (mm) => (mm == null ? null : mm < 0.1 ? 10 : mm < 0.5 ? 40 : mm < 2 ? 65 : 85);
+      r.hourly.precipitation_probability = r.hourly.precipitation.map(chance);
+      r.daily.precipitation_probability_max = r.daily.time.map((dia) => {
+        const v = r.hourly.time.map((t, k) => (t.startsWith(dia) ? r.hourly.precipitation_probability[k] : null)).filter((x) => x != null);
+        return v.length ? Math.max(...v) : null;
+      });
+    }
+    return r;
   }, 24 * 3600 * 1000);
 }
 
