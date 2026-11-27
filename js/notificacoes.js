@@ -8,9 +8,9 @@ const CONFIG_URL = API.coletor.replace('alertas.json', 'push.json');
 const CHAVE = 'wc:notif';
 const MAX_CIDADES = 10;
 const NIVEIS = [
-  { v: 1, t: 'Todos os alertas (amarelo, laranja e vermelho)' },
-  { v: 2, t: 'Só laranja e vermelho' },
-  { v: 3, t: 'Só vermelho (risco extremo)' },
+  { v: 1, t: 'Todos os alertas (amarelo, laranja, vermelho e roxo)' },
+  { v: 2, t: 'Só risco alto ou maior (laranja, vermelho e roxo)' },
+  { v: 3, t: 'Só risco muito alto ou extremo (vermelho e roxo)' },
 ];
 
 const estado = () => ({ cidades: [], nivelMin: 1, ...store.get(CHAVE, {}) });

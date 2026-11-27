@@ -1,27 +1,26 @@
-// Mapa do Brasil com todos os alertas ativos, filtros (estado e severidade), linha do tempo e lista.
+// Mapa do Brasil com todos os alertas ativos, filtros (estado e severidade) e lista.
+// (A linha do tempo fica só na cidade escolhida, na faixa de alertas do topo da previsão.)
 /* global L, polygonClipping */
 import { $, esc, store, UF_NOMES, UF_POR_CODIGO } from './util.js';
 import { todosAlertas, municipiosDoEstado, contornoEstados, FONTES_ALERTA } from './dados.js';
 import { basemap } from './mapaBase.js';
 import { cartaoAlerta } from './previsao.js';
+import { LISTA_NIVEIS } from './niveis.js';
 import { rotulosCidades } from './rotulosCidades.js';
 import { camadaIncendios } from './incendios.js';
 import { mascaraBrasil, prepararMapa, LIMITES_BRASIL } from './mapaControles.js';
-import { renderLinhaTempo } from './linhaTempoAlertas.js';
 
 const CODIGO_POR_UF = Object.fromEntries(Object.entries(UF_POR_CODIGO).map(([c, uf]) => [uf, c]));
 
-// Grupos de severidade (o nível 0, "aviso" informativo, entra junto com o moderado)
-const SEVERIDADES = [
-  { n: 3, nome: 'Extremo', cor: '#E60000', dica: 'Grande perigo (vermelho)' },
-  { n: 2, nome: 'Severo', cor: '#FF8C00', dica: 'Perigo (laranja)' },
-  { n: 1, nome: 'Moderado', cor: '#FFD400', dica: 'Perigo potencial (amarelo)' },
-];
-const grupoSev = (a) => Math.max(1, Math.min(3, Number(a.nivel) || 1));
+// Os quatro níveis do padrão (js/niveis.js), do mais grave ao menos grave
+const CURTO = { 1: 'Moderado', 2: 'Alto', 3: 'Muito alto', 4: 'Extremo' };
+const SEVERIDADES = LISTA_NIVEIS.map((p) => ({ n: p.n, nome: CURTO[p.n], cor: p.cor, dica: `${p.corNome}: ${p.nome} · ${p.risco}` }));
+const TODOS_NIVEIS = SEVERIDADES.map((s) => s.n);
+const grupoSev = (a) => Math.max(1, Math.min(4, Number(a.nivel) || 1));
 
 const estado = {
   mapa: null, grupo: null, foco: null, alertas: [], areas: [], carregado: false,
-  filtroUF: '', severidades: new Set(store.get('wc:sevAlertas', [1, 2, 3])),
+  filtroUF: '', severidades: new Set(store.get('wc:sevAlertas2', TODOS_NIVEIS)),
   status: {}, coletadoEm: null, ufGeo: null, recortes: new Map(), visiveis: [],
 };
 
@@ -126,12 +125,12 @@ function renderSeveridade() {
 function trocarSeveridade(v) {
   if (v === 'todos') {
     const todos = SEVERIDADES.every((s) => estado.severidades.has(s.n));
-    estado.severidades = new Set(todos ? [] : [1, 2, 3]);
+    estado.severidades = new Set(todos ? [] : TODOS_NIVEIS);
   } else {
     const n = Number(v);
     if (estado.severidades.has(n)) estado.severidades.delete(n); else estado.severidades.add(n);
   }
-  store.set('wc:sevAlertas', [...estado.severidades]);
+  store.set('wc:sevAlertas2', [...estado.severidades]);
   renderSeveridade();
   desenhar();
 }
@@ -147,7 +146,6 @@ async function desenhar() {
   estado.visiveis = comGeo;
   const alertasVisiveis = candidatos.map((c) => c.alerta);
   renderLista(alertasVisiveis);
-  renderLinha(alertasVisiveis);
   renderCabecalho();
   if (!estado.mapa) return;
 
@@ -195,7 +193,7 @@ async function desenharFoco() {
   } catch (e) { console.warn('contorno do estado', e); }
 }
 
-/* ======================= Lista, linha do tempo e cabeçalho ======================= */
+/* ======================= Lista e cabeçalho ======================= */
 const nomeRegiao = () => (estado.filtroUF ? UF_NOMES[estado.filtroUF] : 'Brasil');
 
 function renderLista(alertas) {
@@ -206,30 +204,10 @@ function renderLista(alertas) {
     return;
   }
   const ordenados = [...alertas].sort((a, b) => grupoSev(b) - grupoSev(a) || (+a.inicio || 0) - (+b.inicio || 0));
-  const filtroSev = SEVERIDADES.every((s) => estado.severidades.has(s.n)) ? '' : ` (${SEVERIDADES.filter((s) => estado.severidades.has(s.n)).map((s) => s.nome.toLowerCase()).join(', ') || 'nenhuma severidade escolhida'})`;
+  const filtroSev = SEVERIDADES.every((s) => estado.severidades.has(s.n)) ? '' : ` (${SEVERIDADES.filter((s) => estado.severidades.has(s.n)).map((s) => `risco ${s.nome.toLowerCase()}`).join(', ') || 'nenhum nível escolhido'})`;
   el.innerHTML = `<h2 class="lista-titulo">${ordenados.length} alerta${ordenados.length === 1 ? '' : 's'} ativo${ordenados.length === 1 ? '' : 's'} · ${esc(nomeRegiao())}${esc(filtroSev)}</h2>`
     + (ordenados.length ? `<div class="lista-grade">${ordenados.map((a) => `<div class="lista-item" data-alerta="${esc(a.id)}">${cartaoAlerta(a)}${a.estados.length > 1 || (!estado.filtroUF && a.estados.length) ? `<p class="area-alerta">Estados: ${a.estados.map((u) => esc(u)).join(', ')}</p>` : ''}</div>`).join('')}</div>`
       : `<div class="aviso-neutro ok">Nenhum alerta ativo ${estado.filtroUF ? `em ${esc(nomeRegiao())}` : 'no Brasil'} com os filtros escolhidos.</div>`);
-}
-
-function renderLinha(alertas) {
-  $('lt-titulo').textContent = `Linha do tempo dos alertas · ${nomeRegiao()}`;
-  if (!estado.carregado) { $('linha-tempo-alertas').innerHTML = '<p class="nota">Carregando…</p>'; return; }
-  $('lt-detalhe').hidden = true;
-  renderLinhaTempo($('linha-tempo-alertas'), alertas, {
-    vazio: `Nenhum alerta vigente ou previsto ${estado.filtroUF ? `em ${nomeRegiao()}` : 'no Brasil'} com os filtros escolhidos.`,
-    aoClicar: (a) => {
-      const det = $('lt-detalhe');
-      det.innerHTML = cartaoAlerta(a);
-      det.hidden = false;
-      // Aproxima o mapa da área do alerta
-      const v = estado.visiveis.find((x) => x.area.alerta === a);
-      if (estado.mapa && v?.multi.length) {
-        const pts = v.multi.flatMap((poly) => poly[0].map(([lon, lat]) => [lat, lon]));
-        estado.mapa.flyToBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 9, duration: 0.6 });
-      }
-    },
-  });
 }
 
 function renderCabecalho() {

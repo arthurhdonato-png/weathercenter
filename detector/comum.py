@@ -18,11 +18,12 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Mesmos níveis e cores dos alertas do INMET e da Defesa Civil já mostrados no app
 NIVEIS = {
-    1: ('Moderada', '#FFD400'),   # INMET: Perigo Potencial (amarelo)
-    2: ('Severa', '#FF8C00'),     # INMET: Perigo (laranja)
-    3: ('Extrema', '#E60000'),    # INMET: Grande Perigo (vermelho)
+    1: ('Perigo Potencial', '#FFD400'),   # amarelo · risco moderado
+    2: ('Perigo', '#FF8C00'),             # laranja · risco alto
+    3: ('Grande Perigo', '#E60000'),      # vermelho · risco muito alto
+    4: ('Alerta Extremo', '#8E24AA'),     # roxo · risco extremo (padrão do site; o detector usa até o nível 3)
 }
-NOME_NIVEL = {1: 'moderado', 2: 'severo', 3: 'extremo'}
+NOME_NIVEL = {1: 'risco moderado', 2: 'risco alto', 3: 'risco muito alto', 4: 'risco extremo'}
 
 UF_POR_CODIGO = {
     '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',

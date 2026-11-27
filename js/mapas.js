@@ -2,7 +2,7 @@
 // animação das próximas 24 horas, partículas de vento e radar de chuva animado (RainViewer).
 /* global L */
 import { $, num, esc, direcao, getJSON } from './util.js';
-import { contornoBrasil, gradeMapa, radarQuadros } from './dados.js';
+import { contornoBrasilLargo, gradeMapa, radarQuadros } from './dados.js';
 import { basemap, temaEscuro } from './mapaBase.js';
 import { mascaraBrasil, prepararMapa, LIMITES_BRASIL } from './mapaControles.js';
 
@@ -506,7 +506,7 @@ async function carregarDados() {
   st.hidden = false;
   try {
     let aneis = null;
-    try { aneis = aneisDe(await contornoBrasil()); } catch (e) { console.warn('Contorno do Brasil indisponível', e); }
+    try { aneis = aneisDe(await contornoBrasilLargo()); } catch (e) { console.warn('Contorno do Brasil indisponível', e); }
     estado.aneis = aneis;
     const g = montarGrade(aneis);
     estado.indice = g.indice;

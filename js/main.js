@@ -10,6 +10,9 @@ import { icone } from './icones.js';
 import { iniciarAlertasMapa, definirAlertas, filtrarUF } from './alertasMapa.js';
 import { definirCidadeNotificacao, iniciarNotificacoes } from './notificacoes.js';
 import { abrirGraficos, GRUPOS_GRAFICO } from './graficos.js';
+import { iniciarTema } from './tema.js';
+
+iniciarTema();
 
 // Ícones fixos da página (lupa, localização, barra inferior)
 document.querySelectorAll('[data-icone]').forEach((el) => { el.innerHTML = icone(el.dataset.icone); });

@@ -43,7 +43,7 @@ async function todos(tabela, campos) {
 }
 
 /* ---------- Texto da notificação ---------- */
-const SINAL = { 1: '🟡', 2: '🟠', 3: '🔴' };
+const SINAL = { 1: '🟡', 2: '🟠', 3: '🔴', 4: '🟣' };
 const fmtHora = (d) => (d ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d).replace(',', '') : '');
 const corta = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 

@@ -1,4 +1,5 @@
 // Acesso às fontes de dados (todas gratuitas e sem chave de API)
+import { padronizar } from './niveis.js';
 import { getJSON, comCache, store, norm, UF_NOMES, UF_POR_NOME, UF_POR_CODIGO } from './util.js';
 
 export const API = {
@@ -144,23 +145,28 @@ export function qualidadeAr(lat, lon) {
 
 /* ======================= Malhas do IBGE (contornos) ======================= */
 const malhaCache = new Map();
-function malha(caminho, params) {
-  const url = `${API.malhas}/${caminho}?formato=application/vnd.geo%2Bjson&qualidade=minima${params ? `&${params}` : ''}`;
+function malha(caminho, params, qualidade = 'minima') {
+  const url = `${API.malhas}/${caminho}?formato=application/vnd.geo%2Bjson&qualidade=${qualidade}${params ? `&${params}` : ''}`;
   if (!malhaCache.has(url)) {
     malhaCache.set(url, getJSON(url, 45000).catch((e) => { malhaCache.delete(url); throw e; }));
   }
   return malhaCache.get(url);
 }
-// Contornos do país e dos estados: cópia local (malha do IBGE, qualidade mínima) para abrir rápido e
-// não depender do IBGE estar no ar; se a cópia faltar, busca no IBGE.
+// Contornos do país e dos estados: cópia local (malha do IBGE em qualidade máxima, gerada por
+// ferramentas/contornos.py) para abrir rápido e não depender do IBGE estar no ar; se a cópia faltar, busca no IBGE.
 const local = (arquivo, plano) => {
   const chave = `local:${arquivo}`;
   if (!malhaCache.has(chave)) malhaCache.set(chave, getJSON(arquivo, 20000).catch(() => { malhaCache.delete(chave); return plano(); }));
   return malhaCache.get(chave);
 };
-export const contornoBrasil = () => local('dados/contorno-brasil.json', () => malha('paises/BR'));
-export const contornoEstados = () => local('dados/contorno-ufs.json', () => malha('paises/BR', 'intrarregiao=UF'));
-export const municipiosDoEstado = (codigoUF) => malha(`estados/${codigoUF}`, 'intrarregiao=municipio');
+export const contornoBrasil = () => local('dados/contorno-brasil.json', () => malha('paises/BR', '', 'maxima'));
+// Contorno leve e alargado: só para decidir onde calcular as camadas de tempo
+export const contornoBrasilLargo = () => local('dados/contorno-brasil-largo.json', contornoBrasil);
+export const contornoEstados = () => local('dados/contorno-ufs.json', () => malha('paises/BR', 'intrarregiao=UF', 'intermediaria'));
+// O que os mapas cobrem: o mundo menos o Brasil e uma faixa de mar junto à costa (pronto, sem cálculo no aparelho)
+export const mascaraPronta = () => local('dados/mascara-brasil.json', () => Promise.reject(new Error('sem máscara')));
+// Municípios em qualidade intermediária: a área colorida dos alertas chega até a costa e às divisas
+export const municipiosDoEstado = (codigoUF) => malha(`estados/${codigoUF}`, 'intrarregiao=municipio', 'intermediaria');
 
 /* ======================= Alertas ======================= */
 // Cada fonte devolve uma lista no formato comum:
@@ -320,6 +326,8 @@ export async function todosAlertas() {
     console.warn('coletor', coletor.reason);
   }
   for (const f of FONTES_ALERTA) if (f.ativa && !status[f.id]) status[f.id] = 'erro';
+  // Todas as fontes no mesmo padrão de níveis e cores (js/niveis.js)
+  alertas.forEach(padronizar);
   alertas.sort((a, b) => b.nivel - a.nivel);
   return { alertas, status, coletadoEm };
 }
