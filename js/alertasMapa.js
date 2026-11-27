@@ -323,7 +323,7 @@ export async function iniciarAlertasMapa(obterAlertas = todosAlertas) {
     const { lat, lng } = e.latlng;
     const achados = estado.visiveis.filter(({ multi }) => dentroMulti(lng, lat, multi));
     if (!achados.length) return;
-    L.popup({ maxWidth: 320, maxHeight: 360 }).setLatLng(e.latlng)
+    L.popup({ maxWidth: 400, maxHeight: 460 }).setLatLng(e.latlng)
       .setContent(`<div class="popup-alertas">${achados.map(({ area }) => cartaoAlerta(area.alerta)).join('')}</div>`).openOn(mapa);
   });
 
