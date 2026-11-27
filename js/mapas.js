@@ -1,19 +1,21 @@
 // Mapas do tempo: camadas suaves calculadas a partir de uma grade de previsões (Open-Meteo),
 // animação das próximas 24 horas, partículas de vento e radar de chuva animado (RainViewer).
 /* global L */
-import { $, num, esc, direcao, getJSON } from './util.js';
+import { $, num, esc, direcao, getJSON, ehLimite } from './util.js';
 import { contornoBrasilLargo, gradeMapa, radarQuadros } from './dados.js';
 import { basemap, temaEscuro } from './mapaBase.js';
 import { mascaraBrasil, prepararMapa, LIMITES_BRASIL } from './mapaControles.js';
 
 export { basemap, linhasEstados } from './mapaBase.js';
 
-// Grade de previsões (cerca de 140 km entre pontos) e grade fina interpolada (cerca de 28 km)
-const PASSO = 1.25;
+// Grade de previsões (cerca de 195 km entre pontos) e grade fina interpolada (cerca de 28 km)
+// 1,75° entre pontos: cerca de 330 pontos no Brasil. Cada ponto conta como uma consulta na Open-Meteo,
+// que aceita 600 por minuto; com 1,25° (≈600 pontos) o mapa sozinho esgotava o limite e travava a previsão.
+const PASSO = 1.75;
 const LAT_N = 6, LAT_S = -34.5, LON_O = -74.5, LON_L = -33.5;
-const NY = Math.round((LAT_N - LAT_S) / PASSO) + 1;
-const NX = Math.round((LON_L - LON_O) / PASSO) + 1;
-const F = 5;
+const NY = Math.ceil((LAT_N - LAT_S) / PASSO) + 1;
+const NX = Math.ceil((LON_L - LON_O) / PASSO) + 1;
+const F = 7;
 const FY = (NY - 1) * F + 1, FX = (NX - 1) * F + 1;
 
 // Escalas de cor: [valor, [r,g,b,a]]
@@ -524,7 +526,9 @@ async function carregarDados() {
     trocarCamada(estado.camada);
   } catch (e) {
     console.error(e);
-    st.textContent = 'Não foi possível carregar os dados do mapa agora. Tente novamente mais tarde.';
+    st.textContent = ehLimite(e) ? 'O serviço de previsão recebeu consultas demais da sua rede. O mapa volta em alguns minutos.'
+      : 'Não foi possível carregar os dados do mapa agora. Tente novamente mais tarde.';
+    setTimeout(() => { if (!estado.grade) carregarDados(); }, 90 * 1000);
   }
 }
 

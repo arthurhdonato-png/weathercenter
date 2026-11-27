@@ -1,10 +1,10 @@
 // Service worker: guarda o app para abrir rápido e mostra os últimos dados sem internet.
-const VERSAO = 'wc-v13';
+const VERSAO = 'wc-v14';
 const APP = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/main.js', 'js/util.js', 'js/dados.js', 'js/consenso.js', 'js/previsao.js', 'js/icones.js',
   'js/mapas.js', 'js/mapaBase.js', 'js/alertasMapa.js', 'js/rotulosCidades.js', 'js/incendios.js', 'js/notificacoes.js',
   'js/mapaControles.js', 'js/linhaTempoAlertas.js', 'js/graficos.js', 'js/niveis.js', 'js/tema.js', 'js/cena.js', 'vendor/polygon-clipping/polygon-clipping.umd.min.js',
-  'dados/mascara-brasil.json', 'dados/contorno-brasil-largo.json', 'dados/contorno-ufs.json',
+  'dados/mascara-brasil.json', 'dados/municipios.json', 'dados/contorno-brasil-largo.json', 'dados/contorno-ufs.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/fontes/noto-sans-latin-wght-normal.woff2',
   'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css', 'vendor/maplibre/leaflet-maplibre-gl.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
@@ -15,7 +15,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((ks) => Promise.all(ks.filter((k) => k !== VERSAO && k !== `${VERSAO}-dados` && k !== 'wc-notif').map((k) => caches.delete(k))))
+    .then((ks) => Promise.all(ks.filter((k) => k !== VERSAO && k !== `${VERSAO}-dados` && k !== 'wc-notif' && k !== 'wc-grande').map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -24,7 +24,9 @@ function redePrimeiro(req, cacheNome) {
   // misturar um index.html novo com scripts antigos logo depois de uma atualização
   const pedido = cacheNome !== VERSAO ? fetch(req) : req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache' }) : fetch(req, { cache: 'no-cache' });
   return pedido.then((r) => {
-    if (r.ok) { const copia = r.clone(); caches.open(cacheNome).then((c) => c.put(req, copia)); }
+    if (r.ok) { const copia = r.clone(); caches.open(cacheNome).then((c) => c.put(req, copia)); return r; }
+    // Serviço recusou (ex.: 429, consultas demais) ou falhou: usa a última resposta boa, se houver
+    if (cacheNome !== VERSAO && (r.status === 429 || r.status >= 500)) return caches.match(req).then((v) => v || r);
     return r;
   }).catch(() => caches.match(req, { ignoreSearch: cacheNome === VERSAO }).then((r) => r || Promise.reject(new Error('offline'))));
 }

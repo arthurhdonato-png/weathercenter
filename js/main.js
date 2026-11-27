@@ -1,5 +1,5 @@
 // WeatherCenter: fluxo principal, busca, navegação e localização
-import { $, esc, store, norm, UF_NOMES } from './util.js';
+import { $, esc, store, norm, UF_NOMES, ehLimite } from './util.js';
 import {
   carregarMunicipios, buscarLocal, buscarOpenMeteo, coordenadas, previsao, qualidadeAr,
   todosAlertas, alertaAfetaCidade, posicaoAtual, cidadeDaPosicao, municipioPorId,
@@ -148,7 +148,8 @@ async function abrirCidade(cidade, { manterPosicao = false } = {}) {
     if (meu !== pedido) return;
     console.error(e);
     setStatus(navigator.onLine === false ? 'Você está sem internet. Conecte-se e tente de novo.'
-      : `Não foi possível carregar a previsão. ${e.message && !/HTTP|abort|fetch/i.test(e.message) ? e.message : 'Tente novamente em instantes.'}`, true);
+      : ehLimite(e) ? 'O serviço de previsão recebeu consultas demais da sua rede neste minuto. Aguarde 1 minuto e tente de novo.'
+        : `Não foi possível carregar a previsão. ${e.message && !/HTTP|abort|fetch|limit|request/i.test(e.message) ? e.message : 'Tente novamente em instantes.'}`, true);
   } finally {
     if (meu === pedido) document.body.classList.remove('carregando');
   }

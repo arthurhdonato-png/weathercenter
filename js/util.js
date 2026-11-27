@@ -20,7 +20,7 @@ export async function getJSON(url, timeoutMs = 20000) {
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!r.ok) { const e = new Error(`HTTP ${r.status}`); e.status = r.status; throw e; }
     return await r.json();
   } finally {
     clearTimeout(t);
@@ -28,13 +28,43 @@ export async function getJSON(url, timeoutMs = 20000) {
 }
 
 // Guarda o resultado de uma função assíncrona no localStorage por `ttlMs`.
-export async function comCache(chave, ttlMs, fn) {
+// Se a fonte falhar (ex.: limite de consultas), usa a cópia guardada enquanto ela tiver menos de `velhoAteMs`.
+export async function comCache(chave, ttlMs, fn, velhoAteMs = 0) {
   const salvo = store.get(chave);
   if (salvo && Date.now() - salvo.t < ttlMs) return salvo.d;
-  const d = await fn();
-  store.set(chave, { t: Date.now(), d });
-  return d;
+  try {
+    const d = await fn();
+    store.set(chave, { t: Date.now(), d });
+    return d;
+  } catch (e) {
+    if (salvo && Date.now() - salvo.t < velhoAteMs) { console.warn('Usando cópia guardada de', chave, e.message); return salvo.d; }
+    throw e;
+  }
 }
+
+// Igual ao comCache, mas para dados grandes (grade dos mapas): guarda no Cache Storage do navegador,
+// que tem muito mais espaço que o localStorage
+const CACHE_GRANDE = 'wc-grande';
+export async function comCacheGrande(chave, ttlMs, fn, velhoAteMs = 0) {
+  let cache = null, salvo = null;
+  try {
+    cache = await caches.open(CACHE_GRANDE);
+    const r = await cache.match(`/${chave}`);
+    if (r) salvo = await r.json();
+  } catch { /* sem Cache Storage */ }
+  if (salvo && Date.now() - salvo.t < ttlMs) return salvo.d;
+  try {
+    const d = await fn();
+    try { await cache?.put(`/${chave}`, new Response(JSON.stringify({ t: Date.now(), d }))); } catch { /* cheio */ }
+    return d;
+  } catch (e) {
+    if (salvo && Date.now() - salvo.t < velhoAteMs) { console.warn('Usando cópia guardada de', chave, e.message); return salvo.d; }
+    throw e;
+  }
+}
+
+// Erro de "consultas demais" (HTTP 429) do serviço de previsão
+export const ehLimite = (e) => e?.status === 429 || /429|too many|limit exceeded/i.test(String(e?.message || ''));
 
 export const UF_NOMES = {
   AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
