@@ -8,7 +8,7 @@
 //   diferente dos outros não puxa o resultado. Para a chuva usamos a média ponderada sem os extremos.
 // - A chance de chuva é a fração das fontes que preveem chuva, combinada com a probabilidade por conjunto
 //   (ensemble) da Open-Meteo.
-import { getJSON, comCache, store } from './util.js';
+import { getJSON, comCache, store, intensidadeMm } from './util.js';
 
 const OM = 'https://api.open-meteo.com/v1/forecast';
 const METNO = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
@@ -103,8 +103,21 @@ function codigoCoerente(code, chuva, prob, nuvens, porHora = true) {
   const deNuvens = nuvens == null ? 2 : nuvens < 20 ? 0 : nuvens < 45 ? 1 : nuvens < 80 ? 2 : 3;
   if (chove && code < 95 && (chuva ?? 0) < limite && (prob ?? 0) < 40) return Math.max(deNuvens, 2);
   if (!chove && code !== 45 && code !== 48 && (chuva ?? 0) >= (porHora ? 0.5 : 5)) {
-    const forte = (chuva ?? 0) >= (porHora ? 4 : 25);
-    return forte ? 65 : porHora ? 61 : 80;
+    if (porHora) return [61, 61, 63, 65, 65][intensidadeMm(chuva)];
+    return (chuva ?? 0) >= 25 ? 65 : 80;
+  }
+  // Por hora, o nome segue o volume (mesma regra da cena animada): garoa só abaixo de 1 mm/h,
+  // "chuva fraca/chuva/chuva forte" e "pancadas" conforme os mm/h
+  if (porHora && chove && code < 95 && (chuva ?? 0) >= limite) {
+    const n = intensidadeMm(chuva);
+    const garoa = code >= 51 && code <= 57;
+    const congelante = code === 56 || code === 57 || code === 66 || code === 67;
+    if (garoa && chuva < 1) return congelante ? 56 : chuva < 0.3 ? 51 : 53;
+    if (congelante) return n >= 2 ? 67 : 66;
+    if (code >= 71 && code <= 77) return code; // neve: mantém
+    if (code >= 85 && code <= 86) return code;
+    if (code >= 80 && code <= 82) return [80, 80, 81, 82, 82][n];
+    return [61, 61, 63, 65, 65][n];
   }
   return code;
 }
@@ -474,7 +487,7 @@ function limparCacheVelho() {
       const k = localStorage.key(i);
       if (!/^wc:(prev\d*|cons\d*|met|inmetprev|ar\d*|grade\d*):/.test(k)) continue;
       const v = store.get(k);
-      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1|cons2|grade\d*):/.test(k)) localStorage.removeItem(k);
+      if (!v?.t || agora - v.t > 24 * 3600 * 1000 || /^wc:(prev\d*|cons1|cons2|cons3|grade\d*):/.test(k)) localStorage.removeItem(k);
     }
   } catch { /* ok */ }
 }
@@ -483,7 +496,7 @@ let limpo = false;
 // Previsão final. `cidade.id` (código IBGE) permite incluir o INMET.
 export function previsaoConsenso(lat, lon, geocode) {
   if (!limpo) { limpo = true; limparCacheVelho(); }
-  const chave = `wc:cons3:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
+  const chave = `wc:cons4:${(+lat).toFixed(2)},${(+lon).toFixed(2)}`;
   return comCache(chave, 20 * 60 * 1000, async () => {
     const [b, multi, met, inm] = await Promise.allSettled([
       base(lat, lon),
