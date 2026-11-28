@@ -3,11 +3,18 @@ name: Sondar fontes estaduais
 on:
   push:
     branches: ['claude/project-thread-t2b639']
-    paths: ['ferramentas/sondar_fontes.py', '.github/workflows/sondar-fontes.yml']
+    paths: ['ferramentas/sondar_*', '.github/workflows/sondar-fontes.yml']
 jobs:
-  sondar:
+  navegador:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: python3 ferramentas/sondar_fontes.py tudo
+      - run: npm i --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      - run: node ferramentas/sondar_navegador.mjs https://clima.rs.gov.br/ https://prepara.rs.gov.br/boletins-diarios-da-defesa-civil
+  idap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 ferramentas/sondar_fontes.py idap
