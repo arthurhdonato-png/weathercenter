@@ -440,13 +440,15 @@ export function cartaoAlerta(a) {
 
 // Faixa no topo da previsão: os alertas da cidade, antes de tudo. Sem alerta, uma mensagem verde
 // com o que foi consultado (só sobre a cidade, sem falar de alertas em outras partes do estado).
-const NOMES_FONTES = { inmet: 'INMET', 'defesa-civil': 'Defesa Civil', marinha: 'Marinha', weathercenter: 'WeatherCenter' };
+const NOMES_FONTES = { inmet: 'INMET', 'defesa-civil': 'Defesa Civil', 'defesa-civil-rs': 'Defesa Civil RS', marinha: 'Marinha', weathercenter: 'WeatherCenter' };
 function renderFaixaAlertas(daCidade, cidade, resultado) {
   const el = $('faixa-alertas');
   const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
   const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const consultadas = Object.entries(NOMES_FONTES).filter(([id]) => resultado.status[id] === 'ok').map(([, n]) => n);
-  const fora = Object.entries(NOMES_FONTES).filter(([id]) => resultado.status[id] && resultado.status[id] !== 'ok').map(([, n]) => n);
+  // A fonte estadual (site da Defesa Civil RS) só vale para cidades do RS
+  const fontesCidade = Object.entries(NOMES_FONTES).filter(([id]) => id !== 'defesa-civil-rs' || cidade.uf === 'RS');
+  const consultadas = fontesCidade.filter(([id]) => resultado.status[id] === 'ok').map(([, n]) => n);
+  const fora = fontesCidade.filter(([id]) => resultado.status[id] && resultado.status[id] !== 'ok').map(([, n]) => n);
   el.hidden = false;
   if (!daCidade.length) {
     el.classList.add('sem-alerta');

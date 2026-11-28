@@ -57,6 +57,42 @@ def sem_acento(s):
     return ''.join(c for c in unicodedata.normalize('NFD', s or '') if unicodedata.category(c) != 'Mn').lower().strip()
 
 
+# ---------------------------------------------------------------- municípios (nome -> código IBGE)
+_MUNICIPIOS = {}
+NOME_MUNICIPIO = {}  # código IBGE -> nome oficial
+
+
+def municipios():
+    """{(nome sem acento, UF): código IBGE} a partir de dados/cidades.json (todas as 5.570 cidades)."""
+    if not _MUNICIPIOS:
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dados', 'cidades.json')
+        with open(base, encoding='utf-8') as f:
+            d = json.load(f)
+        i_nome, i_uf, i_ibge = (d['campos'].index(c) for c in ('nome', 'uf', 'ibge'))
+        for c in d['cidades']:
+            _MUNICIPIOS[(chave_nome(c[i_nome]), c[i_uf])] = str(c[i_ibge])
+            NOME_MUNICIPIO[str(c[i_ibge])] = c[i_nome]
+    return _MUNICIPIOS
+
+
+def chave_nome(n):
+    n = sem_acento(n).replace("'", ' ').replace('-', ' ')
+    return re.sub(r'\s+', ' ', re.sub(r"[^a-z0-9 ]", ' ', n)).strip()
+
+
+# grafias diferentes entre os boletins e o IBGE
+APELIDOS = {('santana do livramento', 'RS'): 'sant ana do livramento', ('s j dos ausentes', 'RS'): 'sao jose dos ausentes'}
+
+
+def geocode_municipio(nome, uf):
+    k = (chave_nome(nome), uf)
+    k = (APELIDOS.get(k, k[0]), uf)
+    try:
+        return municipios().get(k)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------- rede
 _robots = {}
 
@@ -250,6 +286,14 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
             for v in re.findall(r'\d{6,7}', txt(g, 'value')):
                 if v[:2] in UF_POR_CODIGO and v not in geocodes:
                     geocodes.append(v)
+    if not geocodes:
+        # Sem código IBGE, mas com o município escrito na área ("Itaqui/RS"): usa o contorno oficial do
+        # município, para o alerta aparecer no mapa inteiro da cidade e na linha do tempo dela
+        for ar in areas:
+            m = re.fullmatch(r'\s*(.+?)\s*[/-]\s*([A-Z]{2})\s*', ar)
+            g = geocode_municipio(m[1], m[2]) if m and m[2] in UFS else None
+            if g and g not in geocodes:
+                geocodes.append(g)
     # Com código IBGE o app desenha o contorno oficial do município; sem ele, usa o polígono (simplificado)
     poligonos = [] if geocodes else reduzir_poligonos(poligonos)
     estados = []
@@ -310,6 +354,9 @@ def normalizar_cap(alerta, fonte_id, fonte_nome, link_padrao):
     }, cancelados
 
 
+CANCELADOS = set()  # ids de alertas cancelados vistos nesta execução (guardados para as próximas)
+
+
 def ler_feed_cap(url, fonte_id, fonte_nome, link_padrao, max_links=150):
     """Lê um feed Atom/RSS de CAP. O CAP pode vir dentro do item ou num link separado."""
     raiz = ET.fromstring(baixar(url, timeout=120))
@@ -344,7 +391,46 @@ def ler_feed_cap(url, fonte_id, fonte_nome, link_padrao, max_links=150):
             alertas[a['id']] = a  # o mais recente (mesmo id) substitui
     for c in cancelados:
         alertas.pop(c, None)
+    CANCELADOS.update(cancelados)
     return list(alertas.values())
+
+
+# ---------------------------------------------------------------- memória entre coletas
+ANTERIOR = {'alertas': [], 'cancelados': {}}
+
+
+def ler_anterior(caminho):
+    """Coleta anterior (ramo dados). Serve para não perder alertas que ainda valem."""
+    try:
+        with open(caminho, encoding='utf-8') as f:
+            d = json.load(f)
+        ANTERIOR['alertas'] = d.get('alertas') or []
+        ANTERIOR['cancelados'] = d.get('cancelados') or {}
+    except Exception:
+        pass
+
+
+def manter_vigentes(fonte_id, novos, horas_sem_fim=24, grupos_vistos=()):
+    """O feed da IDAP só traz as últimas ~12 horas de envios: um alerta de 24 h (ex.: "Risco MUITO ALTO
+    de inundação em São Borja, válido até 06h15 de amanhã") some do feed antes de acabar. Por isso o
+    coletor guarda o que já viu e só tira o alerta do ar quando ele vence ou é cancelado."""
+    ids = {a['id'] for a in novos}
+    # Um mapa novo substitui o anterior do mesmo tipo, mesmo que agora esteja tudo normal
+    grupos = {a['grupo'] for a in novos if a.get('grupo')} | set(grupos_vistos)
+    cancelados = CANCELADOS | set(ANTERIOR['cancelados'])
+    mantidos = []
+    for a in ANTERIOR['alertas']:
+        if a.get('fonteId') != fonte_id or a['id'] in ids or a['id'] in cancelados or a.get('grupo') in grupos:
+            continue
+        fim = data_iso(a.get('fim'))
+        if fim is None:
+            ini = data_iso(a.get('inicio'))
+            fim = ini + timedelta(hours=horas_sem_fim) if ini else None
+        if fim and fim > AGORA:
+            mantidos.append({**a, 'mantido': True})
+    if mantidos:
+        print(f'  {fonte_id}: {len(mantidos)} alerta(s) ainda vigente(s) que já saíram do feed')
+    return novos + mantidos
 
 
 # ---------------------------------------------------------------- fontes
@@ -352,6 +438,7 @@ def fonte_defesa_civil():
     """Defesa Civil (nacional, estaduais e municipais) pela IDAP, em CAP 1.2."""
     alertas = ler_feed_cap('https://idapfile.mdr.gov.br/idap/api/rss/cap', 'defesa-civil', 'Defesa Civil',
                            'https://www.gov.br/mdr/pt-br/assuntos/protecao-e-defesa-civil/alertas-de-desastres-1')
+    alertas = manter_vigentes('defesa-civil', alertas)
     if DEBUG and alertas:
         for a in alertas[:2]:
             print('  [debug] exemplo:', json.dumps({**a, 'poligonos': f"{len(a['poligonos'])} anéis"}, ensure_ascii=False)[:1500])
@@ -361,6 +448,213 @@ def fonte_defesa_civil():
         print(f'  [debug] {aneis} anéis, {pts} pontos, {com_geo} com geocode, '
               f"tamanho sem polígonos {len(json.dumps([{**a, 'poligonos': []} for a in alertas])) // 1024} KB")
     return alertas
+
+
+# ---------------------------------------------------------------- Defesa Civil RS (site oficial)
+DC_RS = 'https://www.defesacivil.rs.gov.br'
+DC_RS_LISTA = DC_RS + '/avisos-e-alertas-6ad7aa4f35d41'
+# Nomes dos níveis nos mapas da Defesa Civil RS -> padrão do WeatherCenter (normal = sem alerta)
+NIVEIS_MAPA_RS = {
+    'met': {1: 'Atenção', 2: 'Alerta', 3: 'Severo', 4: 'Extremo'},
+    'hidro': {1: 'Atenção', 2: 'Alerta', 3: 'Inundação', 4: 'Inundação extrema'},
+}
+DIAS_SEMANA = r'(?:segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)(?:-feira)?'
+_MALHA_RS = []
+
+
+def malha_municipios_rs():
+    """Contornos oficiais dos 497 municípios do RS (IBGE, a mesma malha que o app desenha)."""
+    if not _MALHA_RS:
+        url = ('https://servicodados.ibge.gov.br/api/v3/malhas/estados/43?formato=application/vnd.geo%2Bjson'
+               '&qualidade=intermediaria&intrarregiao=municipio')
+        geo = json.loads(baixar(url, timeout=90))
+        import mapas_rs
+        for f in geo['features']:
+            _MALHA_RS.append((str(f['properties']['codarea']), mapas_rs._aneis(f['geometry'])))
+    return _MALHA_RS
+
+
+def _data_post(h):
+    m = re.search(r'article:published_time"\s+content="([^"]+)"', h)
+    if m:
+        try:
+            return datetime.strptime(m[1], '%Y-%m-%dT%H:%M:%S%z').astimezone(UTC)
+        except ValueError:
+            pass
+    m = re.search(r'Publica(?:ção|&ccedil;&atilde;o):\s*(?:<[^>]+>\s*)*(\d{2})/(\d{2})/(\d{4}) às (\d{1,2})h(\d{2})', h)
+    if m:
+        return datetime(int(m[3]), int(m[2]), int(m[1]), int(m[4]), int(m[5]), tzinfo=BRT).astimezone(UTC)
+    return None
+
+
+def _corpo_post(h):
+    """Título, imagem principal e texto do post (o que vem depois de "Publicação:")."""
+    h = html.unescape(h)
+    titulo = re.search(r'<title>(.*?)</title>', h, re.S)[1].split(' - Defesa Civil')[0].strip()
+    i = h.find('Publicação:')
+    fim = h.find('Avisos e alertas', i)
+    trecho = h[i:fim if fim > i else i + 20000] if i >= 0 else ''
+    img = re.search(r'<img[^>]+src="(/upload/recortes/[^"]+_GD\.(?:png|jpe?g))"[^>]*alt="([^"]*)"', trecho)
+    texto = html_para_texto(trecho)
+    texto = re.sub(r'^\s*Publicação:\s*\S+ às \S+\s*', '', texto)
+    paragrafos = [re.sub(r'\s+', ' ', x).strip() for x in texto.split('\n')]
+    paragrafos = [x for x in paragrafos if len(x) > 3 and not x.startswith('Procure informações junto')]
+    return titulo, (img[1] if img else None), (img[2] if img else ''), paragrafos
+
+
+def _ultimo_dia_citado(texto, publicado):
+    """O texto do prognóstico cita os dias ("No domingo (29)"); o aviso vale até o fim do último dia citado."""
+    pub = publicado.astimezone(BRT)
+    ultimo = None
+    for d in re.findall(rf'{DIAS_SEMANA}\s*\((\d{{1,2}})\)', texto, re.I):
+        d = int(d)
+        data = pub.replace(day=1, hour=23, minute=59, second=0, microsecond=0)
+        mes, ano = pub.month, pub.year
+        if d < pub.day - 7:  # virou o mês
+            mes, ano = (1, ano + 1) if mes == 12 else (mes + 1, ano)
+        try:
+            data = data.replace(year=ano, month=mes, day=d)
+        except ValueError:
+            continue
+        if ultimo is None or data > ultimo:
+            ultimo = data
+    return ultimo.astimezone(UTC) if ultimo else None
+
+
+def _valido_ate(texto, publicado):
+    """"Válido até as 6h15 do dia 28/11" ou "Val. 24h"."""
+    m = re.search(r'v[aá]lid[oa] at[eé] (?:[àa]s )?(\d{1,2})h(\d{2})? (?:do dia |de )?(\d{1,2})/(\d{1,2})', texto, re.I)
+    if m:
+        pub = publicado.astimezone(BRT)
+        ano = pub.year + (1 if int(m[4]) < pub.month - 6 else 0)
+        try:
+            return datetime(ano, int(m[4]), int(m[3]), int(m[1]), int(m[2] or 0), tzinfo=BRT).astimezone(UTC)
+        except ValueError:
+            pass
+    m = re.search(r'val(?:idade|\.)?\s*(\d{1,3})\s*h', texto, re.I)
+    if m:
+        return publicado + timedelta(hours=int(m[1]))
+    return None
+
+
+def _municipios_no_texto(frase):
+    """Municípios do RS citados na frase do alerta ("Risco MUITO ALTO em São Borja", "entre Barra do Guarita e Porto Mauá")."""
+    alvo = ' ' + chave_nome(re.sub(r'(?i)rio grande do sul', ' ', frase)) + ' '
+    achados = []
+    nomes = sorted(((n, c) for (n, uf), c in municipios().items() if uf == 'RS'), key=lambda x: -len(x[0]))
+    for n, c in nomes:
+        if f' {n} ' in alvo:
+            alvo = alvo.replace(f' {n} ', ' # ')
+            achados.append(c)
+    return achados
+
+
+def _alerta_rs(post_id, url, publicado, fim, nivel, nome_fonte, titulo, riscos, geocodes, grupo, regiao=''):
+    return {
+        'id': f'defesa-civil-rs-{post_id}-{nivel}',
+        'fonteId': 'defesa-civil-rs',
+        'fonte': 'Defesa Civil',
+        'emissor': 'Defesa Civil do Rio Grande do Sul',
+        'titulo': titulo,
+        'evento': titulo.split(' – ')[0],
+        'severidade': NIVEIS[nivel][0],
+        'severidadeFonte': nome_fonte,
+        'nivel': nivel,
+        'cor': NIVEIS[nivel][1],
+        'inicio': iso(publicado),
+        'fim': iso(fim),
+        'riscos': riscos[:8],
+        'instrucoes': ['Siga as orientações da Defesa Civil do seu município.', 'Em caso de emergência, ligue 199 (Defesa Civil) ou 193 (Bombeiros).'],
+        'geocodes': geocodes,
+        'estados': ['RS'],
+        'poligonos': [],
+        'areaTexto': '',
+        'regiao': regiao,
+        'grupo': grupo,
+        'postId': post_id,
+        'link': url,
+    }
+
+
+def fonte_defesa_civil_rs():
+    """Avisos publicados no site oficial da Defesa Civil RS (os mesmos das redes sociais):
+    - mapas "Áreas com risco meteorológico" e "Áreas com risco hidrológico" (níveis por área, lidos da imagem);
+    - alertas por cidade ("Risco MUITO ALTO de inundação em São Borja", com validade no texto)."""
+    lista = baixar(DC_RS_LISTA, timeout=60).decode('utf-8', 'replace')
+    posts = []
+    for h in re.findall(r'href="(/[a-z0-9-]+-([0-9a-f]{12,13}))"', lista):
+        if h not in posts and 'avisos-e-alertas' not in h[0] and re.search(r'alerta|risco|progn|aviso|inundac|temporal|chuva', h[0]):
+            posts.append(h)
+    anteriores = {}
+    for a in ANTERIOR['alertas']:
+        if a.get('fonteId') == 'defesa-civil-rs' and a.get('postId'):
+            anteriores.setdefault(a['postId'], []).append(a)
+    alertas, erros, grupos_vistos, publicado_grupo = [], [], set(), {}
+    for caminho, post_id in posts[:10]:
+        if post_id in anteriores:  # já lido numa coleta anterior: não baixa de novo
+            grupo = anteriores[post_id][0].get('grupo', '')
+            if grupo.startswith('rs-mapa-'):
+                if grupo in grupos_vistos:
+                    continue
+                grupos_vistos.add(grupo)
+            alertas += [x for x in anteriores[post_id] if data_iso(x.get('fim')) and data_iso(x['fim']) > AGORA]
+            continue
+        url = DC_RS + caminho
+        try:
+            h = baixar(url, timeout=60).decode('utf-8', 'replace')
+            publicado = _data_post(h)
+            if not publicado or publicado < AGORA - timedelta(days=4):
+                continue
+            titulo, img, alt, paragrafos = _corpo_post(h)
+            texto = ' '.join(paragrafos)
+            t = sem_acento(f'{titulo} {alt}')
+            tipo = 'met' if 'prognostico meteorologico' in t or 'mapa met' in t else \
+                'hidro' if 'prognostico hidrologico' in t or 'mapa hidro' in t else None
+            if tipo and img:
+                # Só o mapa mais recente de cada tipo vale (a lista vem do mais novo para o mais velho)
+                if f'rs-mapa-{tipo}' in grupos_vistos:
+                    continue
+                grupos_vistos.add(f'rs-mapa-{tipo}')
+                fim = _ultimo_dia_citado(texto, publicado) or publicado + timedelta(hours=48)
+                if fim < AGORA:
+                    continue
+                import mapas_rs
+                niveis, encaixe = mapas_rs.niveis_por_municipio(baixar(DC_RS + img, timeout=60), malha_municipios_rs())
+                print(f'  mapa {tipo} {post_id}: {len(niveis)} município(s) com risco (encaixe {encaixe:.2f})')
+                nome_mapa = 'Risco meteorológico' if tipo == 'met' else 'Risco hidrológico'
+                for nivel in (4, 3, 2, 1):
+                    cods = sorted(c for c, n in niveis.items() if n == nivel)
+                    if not cods:
+                        continue
+                    nome_nivel = NIVEIS_MAPA_RS[tipo][nivel]
+                    alertas.append(_alerta_rs(
+                        post_id, url, publicado, fim, nivel, nome_nivel, f'{nome_mapa} – {nome_nivel}', paragrafos,
+                        cods, f'rs-mapa-{tipo}',
+                        f'Mapa de {nome_mapa.lower()} da Defesa Civil RS: nível {nome_nivel.upper()} em {len(cods)} município(s). '
+                        'Áreas lidas do mapa oficial e ajustadas aos limites dos municípios.'))
+                continue
+            # Alerta para cidades citadas no texto
+            frase = next((p for p in paragrafos if re.search(r'(?i)risco|alerta', p)), '')
+            nivel = nivel_no_texto(f'{titulo} {frase}')
+            fim = _valido_ate(frase, publicado)
+            cods = _municipios_no_texto(frase or titulo)
+            if not nivel or not cods or not fim or fim < AGORA:
+                continue
+            evento = re.search(r'(?i)(inunda[çc][ãa]o|enxurrada|alagamento|temporal|tempestade|chuva[s]? intensa[s]?|granizo|vendaval|deslizamento|eleva[çc][ãa]o)', frase)
+            ev = evento[1].capitalize() if evento else 'Alerta'
+            cidades = ', '.join(NOME_MUNICIPIO[c] for c in cods)
+            alertas.append(_alerta_rs(post_id, url, publicado, fim, nivel, ('Risco Moderado', 'Risco Alto', 'Risco Muito Alto', 'Risco Extremo')[nivel - 1],
+                                      f'{ev} – {cidades[:100]}/RS',
+                                      [frase] + [p for p in paragrafos if p != frase], cods, f'rs-cidade-{post_id}'))
+        except Exception as e:
+            erros.append(f'{url}: {e}')
+            print(f'  aviso: {url}: {e}')
+    if erros and not alertas and len(erros) >= len(posts[:10]):
+        raise RuntimeError('; '.join(erros)[:300])
+    for a in alertas:
+        if a.get('grupo', '').startswith('rs-mapa-'):
+            grupos_vistos.add(a['grupo'])
+    return manter_vigentes('defesa-civil-rs', alertas, grupos_vistos=grupos_vistos)
 
 
 # Cemaden: o painel (painelalertas.cemaden.gov.br/wsAlertas2) tem dados em JSON, mas o robots.txt
@@ -578,14 +872,28 @@ def fonte_focos(anterior_caminho):
 
 FONTES = [
     ('defesa-civil', 'Defesa Civil (IDAP)', fonte_defesa_civil),
+    ('defesa-civil-rs', 'Defesa Civil RS (site oficial)', fonte_defesa_civil_rs),
     ('marinha', 'Marinha (CHM)', fonte_marinha),
 ]
+
+
+def sem_repetidos(alertas):
+    """O mesmo alerta de cidade pode vir pela IDAP (SMS) e pelo site da Defesa Civil RS: fica o da IDAP."""
+    idap = [(set(a['geocodes']), a['nivel']) for a in alertas if a.get('fonteId') == 'defesa-civil' and a['geocodes']]
+    res = []
+    for a in alertas:
+        if a.get('fonteId') == 'defesa-civil-rs' and str(a.get('grupo', '')).startswith('rs-cidade-') and \
+                any(n == a['nivel'] and set(a['geocodes']) <= g for g, n in idap):
+            continue
+        res.append(a)
+    return res
 
 
 def main():
     pasta = sys.argv[1] if len(sys.argv) > 1 else 'saida'
     os.makedirs(pasta, exist_ok=True)
     resultado = {'versao': 1, 'gerado_em': iso(AGORA), 'fontes': {}, 'alertas': [], 'inmet_bruto': None}
+    ler_anterior(os.environ.get('ALERTAS_ANTERIOR', 'anterior/alertas.json'))
     for fid, fnome, fn in FONTES:
         t0 = time.time()
         try:
@@ -594,7 +902,10 @@ def main():
             resultado['fontes'][fid] = {'nome': fnome, 'ok': True, 'quantidade': len(alertas)}
             print(f'{fnome}: {len(alertas)} alerta(s) em {time.time() - t0:.1f}s')
         except Exception as e:
-            resultado['fontes'][fid] = {'nome': fnome, 'ok': False, 'quantidade': 0, 'erro': str(e)[:300]}
+            # Fonte fora do ar: mantém o que ela tinha publicado e ainda vale
+            antigos = manter_vigentes(fid, [])
+            resultado['alertas'] += antigos
+            resultado['fontes'][fid] = {'nome': fnome, 'ok': False, 'quantidade': len(antigos), 'erro': str(e)[:300]}
             print(f'{fnome}: ERRO {e}')
         resultado['fontes'][fid]['segundos'] = round(time.time() - t0, 1)
     t0 = time.time()
@@ -621,7 +932,13 @@ def main():
             shutil.copy(os.environ.get('FOCOS_ANTERIOR', 'anterior/focos.json'), os.path.join(pasta, 'focos.json'))
         except Exception:
             pass
+    resultado['alertas'] = sem_repetidos(resultado['alertas'])
     resultado['alertas'].sort(key=lambda a: -a['nivel'])
+    # Cancelamentos dos últimos 3 dias, para um alerta cancelado não voltar pela memória
+    limite = iso(AGORA - timedelta(days=3))
+    canc = {k: v for k, v in ANTERIOR['cancelados'].items() if v >= limite}
+    canc.update({c: iso(AGORA) for c in CANCELADOS if c not in canc})
+    resultado['cancelados'] = canc
     # A cópia do INMET vai num arquivo à parte: o app só baixa quando o INMET não responde
     inmet = resultado.pop('inmet_bruto')
     if inmet is not None:
