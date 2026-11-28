@@ -1,0 +1,13 @@
+# Temporário: testa o acesso às fontes estaduais a partir do GitHub Actions
+name: Sondar fontes estaduais
+on:
+  push:
+    branches: ['claude/project-thread-t2b639']
+    paths: ['ferramentas/sondar_fontes.py', '.github/workflows/sondar-fontes.yml']
+jobs:
+  sondar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 ferramentas/sondar_fontes.py tudo
