@@ -66,6 +66,8 @@ jobs:
         run: |
           mkdir -p anterior
           git fetch -q --depth=1 origin dados && git show FETCH_HEAD:focos.json > anterior/focos.json || rm -f anterior/focos.json
+          # Alertas da coleta anterior: os que ainda valem continuam no ar mesmo depois de sair do feed
+          git show FETCH_HEAD:alertas.json > anterior/alertas.json 2>/dev/null || rm -f anterior/alertas.json
           # Estado do detector (raios dos últimos 40 min, tempestades acompanhadas, ecos fixos do radar)
           for f in estado-detector.json.gz radar-persistencia.npz; do
             git show "FETCH_HEAD:$f" > "anterior/$f" 2>/dev/null || rm -f "anterior/$f"
