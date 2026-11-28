@@ -5,16 +5,31 @@ on:
     branches: ['claude/project-thread-t2b639']
     paths: ['ferramentas/sondar_*', '.github/workflows/sondar-fontes.yml']
 jobs:
+  paginas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: >
+          python3 ferramentas/sondar_fontes.py
+          https://www.defesacivil.rs.gov.br/robots.txt
+          https://www.defesacivil.rs.gov.br/avisos-e-alertas-6ad7aa4f35d41
+          https://www.defesacivil.rs.gov.br/avisos-e-boletins
+          https://www.defesacivil.rs.gov.br/defesa-civil-alerta-inundacao-do-rio-uruguai-risco-muito-alto-de-inundacao-em-sao-borja-6b0950a7bca77
+          https://www.defesacivil.rs.gov.br/o-centro-de-monitoramento-da-defesa-civil-atualiza-o-prognostico-meteorologico-para-os-proximos-dias-6b09a3a8ceef9
+          https://www.defesacivil.rs.gov.br/o-centro-de-monitoramento-da-defesa-civil-atualiza-o-prognostico-hidrologico-para-os-proximos-dias-6b09a35ed7872
+          https://www.defesacivil.pr.gov.br/robots.txt
+          https://www.defesacivil.pr.gov.br/alertas-vigentes
+          https://alerta.es.gov.br/robots.txt
+          https://alerta.es.gov.br/avisos
+          https://defesacivil.pa.gov.br/alertas-meteorologicos/
+          https://www.spsemprealerta.sp.gov.br/
+          https://www.ba.gov.br/defesacivil/robots.txt
+          https://www.mg.gov.br/defesacivil
   navegador:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: npm i --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
-      - run: node ferramentas/sondar_navegador.mjs https://clima.rs.gov.br/ https://prepara.rs.gov.br/boletins-diarios-da-defesa-civil
-  idap:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - run: python3 ferramentas/sondar_fontes.py idap
+      - run: node ferramentas/sondar_navegador.mjs https://www.defesacivil.pr.gov.br/alertas-vigentes https://alerta.es.gov.br/avisos https://www.spsemprealerta.sp.gov.br/ https://www.defesacivil.sc.gov.br/
